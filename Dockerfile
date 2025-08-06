@@ -13,16 +13,12 @@ ENV PYTHONUNBUFFERED=1 \
 # Upgrade system packages
 RUN apt-get update && apt-get upgrade -y && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
-COPY requirements.txt /tmp/requirements.txt
-
 # Fully replace blinker, ignoring the broken old installation
 RUN pip install --upgrade pip \
-    && pip install --ignore-installed blinker \
-    && pip install -r /tmp/requirements.txt \
-    && rm -rf /root/.cache/pip
+    && pip install --ignore-installed blinker
 
 # Copy files
+COPY requirements.txt .
 COPY ./setup.py .
 COPY ./streamlit_app.py .
 #COPY ./gradio_app.py .
@@ -30,7 +26,8 @@ COPY ./start.sh .
 RUN chmod +x start.sh
 COPY ./dots_ocr ./dots_ocr
 COPY ./test_images_dir ./test_images_dir
-RUN pip install -e .
+RUN pip install -e . \
+    && rm -rf /root/.cache/pip
 
 # Expose port
 EXPOSE 8501
