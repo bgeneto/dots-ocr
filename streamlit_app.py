@@ -41,11 +41,11 @@ DEFAULT_CONFIG = {
 
 # ==================== Global Variables ====================
 # Initialize session state for configuration
-if 'current_config' not in st.session_state:
+if "current_config" not in st.session_state:
     st.session_state.current_config = DEFAULT_CONFIG.copy()
 
 # Initialize session state for DotsOCRParser
-if 'dots_parser' not in st.session_state:
+if "dots_parser" not in st.session_state:
     st.session_state.dots_parser = DotsOCRParser(
         ip=DEFAULT_CONFIG["ip"],
         port=DEFAULT_CONFIG["port_vllm"],
@@ -55,7 +55,7 @@ if 'dots_parser' not in st.session_state:
     )
 
 # Initialize session state for processing results
-if 'processing_results' not in st.session_state:
+if "processing_results" not in st.session_state:
     st.session_state.processing_results = {
         "original_image": None,
         "processed_image": None,
@@ -69,7 +69,7 @@ if 'processing_results' not in st.session_state:
     }
 
 # Initialize session state for PDF caching mechanism
-if 'pdf_cache' not in st.session_state:
+if "pdf_cache" not in st.session_state:
     st.session_state.pdf_cache = {
         "images": [],
         "current_page": 0,
@@ -81,12 +81,14 @@ if 'pdf_cache' not in st.session_state:
 
 # ==================== Utility Functions ====================
 
+
 def create_temp_session_dir():
     """Creates a unique temporary directory for each processing request"""
     session_id = uuid.uuid4().hex[:8]
     temp_dir = os.path.join(tempfile.gettempdir(), f"dots_ocr_demo_{session_id}")
     os.makedirs(temp_dir, exist_ok=True)
     return temp_dir, session_id
+
 
 def read_image_v2(img):
     """Reads an image, supports URLs and local paths"""
@@ -101,6 +103,7 @@ def read_image_v2(img):
     else:
         raise ValueError(f"Invalid image type: {type(img)}")
     return img
+
 
 def load_file_for_preview(file_path):
     """Loads a file for preview, supports PDF and image files"""
@@ -133,6 +136,7 @@ def load_file_for_preview(file_path):
     st.session_state.pdf_cache["results"] = []
 
     return pages[0], f"Page 1 / {len(pages)}"
+
 
 def parse_image_with_high_level_api(parser, image, prompt_mode, fitz_preprocess=False):
     """
@@ -169,17 +173,19 @@ def parse_image_with_high_level_api(parser, image, prompt_mode, fitz_preprocess=
         filtered = False
 
         # Read the layout image
-        if "layout_image_path" in result and os.path.exists(result["layout_image_path"]):
+        if "layout_image_path" in result and os.path.exists(
+            result["layout_image_path"]
+        ):
             layout_image = Image.open(result["layout_image_path"])
 
         # Read the JSON data
         if "layout_info_path" in result and os.path.exists(result["layout_info_path"]):
-            with open(result["layout_info_path"], 'r', encoding='utf-8') as f:
+            with open(result["layout_info_path"], "r", encoding="utf-8") as f:
                 cells_data = json.load(f)
 
         # Read the Markdown content
         if "md_content_path" in result and os.path.exists(result["md_content_path"]):
-            with open(result["md_content_path"], 'r', encoding='utf-8') as f:
+            with open(result["md_content_path"], "r", encoding="utf-8") as f:
                 md_content = f.read()
 
         # Check for the raw response file (when JSON parsing fails)
@@ -203,6 +209,7 @@ def parse_image_with_high_level_api(parser, image, prompt_mode, fitz_preprocess=
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir, ignore_errors=True)
         raise e
+
 
 def parse_pdf_with_high_level_api(parser, pdf_path, prompt_mode):
     """
@@ -240,18 +247,24 @@ def parse_pdf_with_high_level_api(parser, pdf_path, prompt_mode):
             }
 
             # Read the layout image
-            if "layout_image_path" in result and os.path.exists(result["layout_image_path"]):
+            if "layout_image_path" in result and os.path.exists(
+                result["layout_image_path"]
+            ):
                 page_result["layout_image"] = Image.open(result["layout_image_path"])
 
             # Read the JSON data
-            if "layout_info_path" in result and os.path.exists(result["layout_info_path"]):
-                with open(result["layout_info_path"], 'r', encoding='utf-8') as f:
+            if "layout_info_path" in result and os.path.exists(
+                result["layout_info_path"]
+            ):
+                with open(result["layout_info_path"], "r", encoding="utf-8") as f:
                     page_result["cells_data"] = json.load(f)
                     all_cells_data.extend(page_result["cells_data"])
 
             # Read the Markdown content
-            if "md_content_path" in result and os.path.exists(result["md_content_path"]):
-                with open(result["md_content_path"], 'r', encoding='utf-8') as f:
+            if "md_content_path" in result and os.path.exists(
+                result["md_content_path"]
+            ):
+                with open(result["md_content_path"], "r", encoding="utf-8") as f:
                     page_content = f.read()
                     page_result["md_content"] = page_content
                     all_md_content.append(page_content)
@@ -280,6 +293,7 @@ def parse_pdf_with_high_level_api(parser, pdf_path, prompt_mode):
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir, ignore_errors=True)
         raise e
+
 
 @st.cache_resource
 def legacy_read_image_v2(img: str):
@@ -328,7 +342,7 @@ def create_config_sidebar():
     config["include_headers_footers"] = st.sidebar.checkbox(
         "Include Page Headers & Footers in Markdown",
         value=False,
-        help="When unchecked (default), the downloaded markdown will exclude page headers and footers for cleaner content. When checked, headers and footers will be included."
+        help="When unchecked (default), the downloaded markdown will exclude page headers and footers for cleaner content. When checked, headers and footers will be included.",
     )
 
     return config
@@ -352,8 +366,7 @@ def get_file_input():
     if input_mode == "Upload File":
         # File uploader - now supports both images and PDFs
         uploaded_file = st.file_uploader(
-            "Upload Image or PDF",
-            type=["png", "jpg", "jpeg", "pdf"]
+            "Upload Image or PDF", type=["png", "jpg", "jpeg", "pdf"]
         )
         if uploaded_file is not None:
             # Determine file extension and save to temporary file
@@ -389,7 +402,9 @@ def get_file_input():
     return None, None
 
 
-def create_combined_markdown_file(pdf_results, session_id, temp_dir, include_headers_footers=False):
+def create_combined_markdown_file(
+    pdf_results, session_id, temp_dir, include_headers_footers=False
+):
     """Create a combined markdown file from all PDF pages
 
     Args:
@@ -418,13 +433,17 @@ def create_combined_markdown_file(pdf_results, session_id, temp_dir, include_hea
             # Use regular markdown with headers/footers
             if result.get("md_content"):
                 md_content = result["md_content"]
-            elif "md_content_path" in result and os.path.exists(result["md_content_path"]):
-                with open(result["md_content_path"], 'r', encoding='utf-8') as f:
+            elif "md_content_path" in result and os.path.exists(
+                result["md_content_path"]
+            ):
+                with open(result["md_content_path"], "r", encoding="utf-8") as f:
                     md_content = f.read()
         else:
             # Use no-header/footer version
-            if "md_content_nohf_path" in result and os.path.exists(result["md_content_nohf_path"]):
-                with open(result["md_content_nohf_path"], 'r', encoding='utf-8') as f:
+            if "md_content_nohf_path" in result and os.path.exists(
+                result["md_content_nohf_path"]
+            ):
+                with open(result["md_content_nohf_path"], "r", encoding="utf-8") as f:
                     md_content = f.read()
             elif result.get("md_content"):
                 # Fallback to regular content if nohf version not available
@@ -439,21 +458,23 @@ def create_combined_markdown_file(pdf_results, session_id, temp_dir, include_hea
         combined_md = "\n".join(combined_md_lines)
         filename = f"combined_document_{session_id}{version_suffix}.md"
         md_path = os.path.join(temp_dir, filename)
-        with open(md_path, 'w', encoding='utf-8') as f:
+        with open(md_path, "w", encoding="utf-8") as f:
             f.write(combined_md)
         return md_path
     return None
+
 
 def create_download_link(file_path, download_name):
     """Create a download link for a file"""
     if not file_path or not os.path.exists(file_path):
         return None
 
-    with open(file_path, 'rb') as f:
+    with open(file_path, "rb") as f:
         file_data = f.read()
 
     b64_data = base64.b64encode(file_data).decode()
     return f'<a href="data:application/octet-stream;base64,{b64_data}" download="{download_name}">Download {download_name}</a>'
+
 
 def process_file_with_high_level_api(file_path, file_ext, prompt_mode, config):
     """Process file using high-level API"""
@@ -474,17 +495,19 @@ def process_file_with_high_level_api(file_path, file_ext, prompt_mode, config):
         st.session_state.pdf_cache["results"] = pdf_result["parsed_results"]
 
         # Store results in processing_results
-        st.session_state.processing_results.update({
-            "original_image": None,
-            "processed_image": None,
-            "layout_result": None,
-            "markdown_content": pdf_result["combined_md_content"],
-            "cells_data": pdf_result["combined_cells_data"],
-            "temp_dir": pdf_result["temp_dir"],
-            "session_id": pdf_result["session_id"],
-            "result_paths": None,
-            "pdf_results": pdf_result["parsed_results"],
-        })
+        st.session_state.processing_results.update(
+            {
+                "original_image": None,
+                "processed_image": None,
+                "layout_result": None,
+                "markdown_content": pdf_result["combined_md_content"],
+                "cells_data": pdf_result["combined_cells_data"],
+                "temp_dir": pdf_result["temp_dir"],
+                "session_id": pdf_result["session_id"],
+                "result_paths": None,
+                "pdf_results": pdf_result["parsed_results"],
+            }
+        )
 
         return pdf_result
     else:
@@ -495,17 +518,20 @@ def process_file_with_high_level_api(file_path, file_ext, prompt_mode, config):
         )
 
         # Store results in processing_results
-        st.session_state.processing_results.update({
-            "original_image": image,
-            "processed_image": None,
-            "layout_result": parse_result["layout_image"],
-            "markdown_content": parse_result["md_content"],
-            "cells_data": parse_result["cells_data"],
-            "temp_dir": parse_result["temp_dir"],
-            "session_id": parse_result["session_id"],
-            "result_paths": parse_result["result_paths"],
-            "pdf_results": None,
-        })
+        st.session_state.processing_results.update(
+            {
+                "original_image": image,
+                "processed_image": None,
+                "layout_result": parse_result["layout_image"],
+                "markdown_content": parse_result["md_content"],
+                "cells_data": parse_result["cells_data"],
+                "temp_dir": parse_result["temp_dir"],
+                "session_id": parse_result["session_id"],
+                "result_paths": parse_result["result_paths"],
+                "pdf_results": None,
+            }
+        )
+
 
 def process_and_display_results_legacy(output: dict, image: Image.Image, config: dict):
     """Process and display inference results (legacy function for backward compatibility)"""
@@ -570,6 +596,7 @@ def process_and_display_results_legacy(output: dict, image: Image.Image, config:
     except Exception as e:
         st.error(f"Error processing results: {e}")
 
+
 def display_pdf_preview():
     """Display PDF preview with page navigation"""
     if not st.session_state.pdf_cache["images"]:
@@ -584,7 +611,9 @@ def display_pdf_preview():
     current_image = st.session_state.pdf_cache["images"][current_page]
 
     # If parsed, show results for current page
-    if st.session_state.pdf_cache["is_parsed"] and current_page < len(st.session_state.pdf_cache["results"]):
+    if st.session_state.pdf_cache["is_parsed"] and current_page < len(
+        st.session_state.pdf_cache["results"]
+    ):
         result = st.session_state.pdf_cache["results"][current_page]
         if result.get("layout_image"):
             current_image = result["layout_image"]
@@ -602,10 +631,13 @@ def display_pdf_preview():
 
     with col3:
         if st.button("Next ▶", disabled=(current_page == total_pages - 1)):
-            st.session_state.pdf_cache["current_page"] = min(total_pages - 1, current_page + 1)
+            st.session_state.pdf_cache["current_page"] = min(
+                total_pages - 1, current_page + 1
+            )
             st.rerun()
 
     return current_image
+
 
 def display_processing_results(config):
     """Display the processing results based on file type"""
@@ -617,12 +649,14 @@ def display_processing_results(config):
 
         # Show info
         total_elements = len(results["cells_data"]) if results["cells_data"] else 0
-        st.info(f"""
+        st.info(
+            f"""
 **PDF Information:**
 - Total Pages: {len(results['pdf_results'])}
 - Total Detected Elements: {total_elements}
 - Session ID: {results['session_id']}
-        """)
+        """
+        )
 
         # Display current page results in preview
         display_pdf_preview()
@@ -634,8 +668,9 @@ def display_processing_results(config):
 
         # Show current page details
         current_page = st.session_state.pdf_cache["current_page"]
-        if (st.session_state.pdf_cache["is_parsed"] and
-            current_page < len(st.session_state.pdf_cache["results"])):
+        if st.session_state.pdf_cache["is_parsed"] and current_page < len(
+            st.session_state.pdf_cache["results"]
+        ):
 
             current_result = st.session_state.pdf_cache["results"][current_page]
 
@@ -657,14 +692,16 @@ def display_processing_results(config):
                 results["pdf_results"],
                 results["session_id"],
                 results["temp_dir"],
-                include_headers_footers=include_hf
+                include_headers_footers=include_hf,
             )
             if md_file_path:
                 # Generate appropriate filename based on user preference
                 version_suffix = "" if include_hf else "_nohf"
-                filename = f"combined_document_{results['session_id']}{version_suffix}.md"
+                filename = (
+                    f"combined_document_{results['session_id']}{version_suffix}.md"
+                )
 
-                with open(md_file_path, 'rb') as f:
+                with open(md_file_path, "rb") as f:
                     download_label = "📄 Download Combined Markdown"
                     if not include_hf:
                         download_label += " (No Headers/Footers)"
@@ -673,7 +710,7 @@ def display_processing_results(config):
                         label=download_label,
                         data=f.read(),
                         file_name=filename,
-                        mime="text/markdown"
+                        mime="text/markdown",
                     )
 
     else:  # Image results
@@ -682,12 +719,14 @@ def display_processing_results(config):
 
             # Show info
             num_elements = len(results["cells_data"]) if results["cells_data"] else 0
-            st.info(f"""
+            st.info(
+                f"""
 **Image Information:**
 - Original Size: {results['original_image'].width} x {results['original_image'].height}
 - Detected {num_elements} layout elements
 - Session ID: {results['session_id']}
-            """)
+            """
+            )
 
             col1, col2 = st.columns(2)
 
@@ -711,8 +750,9 @@ def display_processing_results(config):
                     label="📄 Download Markdown",
                     data=results["markdown_content"],
                     file_name=f"layout_result_{results['session_id']}.md",
-                    mime="text/markdown"
+                    mime="text/markdown",
                 )
+
 
 def process_and_display_results_legacy(output: dict, image: Image.Image, config: dict):
     """Process and display inference results (legacy function for backward compatibility)"""
@@ -782,9 +822,7 @@ def process_and_display_results_legacy(output: dict, image: Image.Image, config:
 def main():
     """Main application function"""
     st.set_page_config(
-        page_title="VLM PDF to Markdown Converter",
-        layout="wide",
-        page_icon="📄"
+        page_title="VLM PDF to Markdown Converter", layout="wide", page_icon="📄"
     )
     st.title("📄 VLM PDF to Markdown Converter")
 
@@ -837,7 +875,7 @@ def main():
                 preview_image, page_info = load_file_for_preview(file_path)
                 if preview_image:
                     st.markdown("### File Preview")
-                    st.write(page_info)
+                    # st.write(page_info)
 
                     # Show PDF preview with navigation
                     preview_col1, preview_col2 = st.columns([2, 1])
@@ -846,8 +884,12 @@ def main():
 
                     with preview_col2:
                         st.markdown("**PDF Information:**")
-                        st.write(f"- Total pages: {st.session_state.pdf_cache['total_pages']}")
-                        st.write(f"- Current page: {st.session_state.pdf_cache['current_page'] + 1}")
+                        st.write(
+                            f"- Total pages: {st.session_state.pdf_cache['total_pages']}"
+                        )
+                        st.write(
+                            f"- Current page: {st.session_state.pdf_cache['current_page'] + 1}"
+                        )
 
             else:
                 # Load image for preview
@@ -892,8 +934,12 @@ def main():
                 return
 
     # Display results if available
-    if (st.session_state.processing_results["markdown_content"] or
-        st.session_state.processing_results["pdf_results"]):
+    if (
+        st.session_state.processing_results["markdown_content"]
+        or st.session_state.processing_results["pdf_results"]
+    ):
         display_processing_results(config)
+
+
 if __name__ == "__main__":
     main()
