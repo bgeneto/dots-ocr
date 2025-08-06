@@ -358,7 +358,7 @@ def create_config_sidebar():
 
 def get_file_input():
     """Get file input (images or PDF)"""
-    st.markdown("#### File Input Options:")
+    st.markdown("#### Choose an Option:")
 
     input_mode = st.pills(
         label="Select input method",
@@ -484,8 +484,10 @@ def create_download_link(file_path, download_name):
     return f'<a href="data:application/octet-stream;base64,{b64_data}" download="{download_name}">Download {download_name}</a>'
 
 
-def process_file_with_high_level_api(file_path, file_ext, prompt_mode, config):
-    """Process file using high-level API"""
+def process_file_with_high_level_api(
+    file_path, file_ext, prompt_mode, config, status_placeholder=None
+):
+    """Process file using high-level API with progress updates"""
     # Update parser configuration
     st.session_state.dots_parser.ip = config["ip"]
     st.session_state.dots_parser.port = config["port"]
@@ -494,16 +496,32 @@ def process_file_with_high_level_api(file_path, file_ext, prompt_mode, config):
 
     if file_ext == ".pdf":
         # PDF processing with per-page progress
+        if status_placeholder:
+            status_placeholder.info("📋 Loading PDF pages...")
+
         pages = load_images_from_pdf(file_path)
         total_pages = len(pages)
+
+        if status_placeholder:
+            status_placeholder.info(f"📄 Processing PDF with {total_pages} pages...")
+
         # Prepare temporary session
         temp_dir, session_id = create_temp_session_dir()
         parsed_results = []
         all_cells = []
         all_md = []
         progress_bar = st.progress(0)
+
         for idx, page_img in enumerate(pages):
-            filename = f"demo_{session_id}_page_{idx+1}"
+            current_page = idx + 1
+
+            # Update status with current page info
+            if status_placeholder:
+                status_placeholder.info(
+                    f"🔄 Processing page {current_page} of {total_pages}... Server: {config['ip']}:{config['port']}"
+                )
+
+            filename = f"demo_{session_id}_page_{current_page}"
             # Parse single page
             results = (
                 st.session_state.dots_parser.parse_image(
@@ -517,7 +535,7 @@ def process_file_with_high_level_api(file_path, file_ext, prompt_mode, config):
             if results:
                 res = results[0]
                 page = {
-                    "page_no": idx + 1,
+                    "page_no": current_page,
                     "layout_image": (
                         Image.open(res["layout_image_path"])
                         if res.get("layout_image_path")
@@ -540,8 +558,13 @@ def process_file_with_high_level_api(file_path, file_ext, prompt_mode, config):
                 if page["md_content"]:
                     all_md.append(page["md_content"])
             # Update progress
-            progress_bar.progress((idx + 1) / total_pages)
+            progress_bar.progress(current_page / total_pages)
         # Combine results
+        if status_placeholder:
+            status_placeholder.info(
+                f"📝 Finalizing PDF processing ({total_pages} pages)..."
+            )
+
         combined_md = "\n\n---\n\n".join(all_md)
         pdf_result = {
             "parsed_results": parsed_results,
@@ -575,10 +598,18 @@ def process_file_with_high_level_api(file_path, file_ext, prompt_mode, config):
         return pdf_result
     else:
         # Image processing
+        if status_placeholder:
+            status_placeholder.info(
+                f"🖼️ Processing image... Server: {config['ip']}:{config['port']}"
+            )
+
         image = legacy_read_image_v2(file_path)
         parse_result = parse_image_with_high_level_api(
             st.session_state.dots_parser, image, prompt_mode
         )
+
+        if status_placeholder:
+            status_placeholder.info("✅ Image processing completed!")
 
         # Store results in processing_results
         st.session_state.processing_results.update(
@@ -703,10 +734,7 @@ def display_processing_results(config):
 {time_info}
         """
 
-        st.info(info_text)
-
-        # Display current page results in preview
-        display_pdf_preview(key_prefix="processing")
+        st.success(info_text)
 
         # Show combined markdown content
         if results["markdown_content"]:
@@ -983,36 +1011,41 @@ def main():
     )
 
     if start_button and file_path:
-        with st.spinner(f"Processing... Server: {config['ip']}:{config['port']}"):
-            try:
-                # Record start time
-                start_time = time.time()
-                st.session_state.processing_results["start_time"] = start_time
+        # Create a placeholder for dynamic status updates
+        status_placeholder = st.empty()
 
-                # Process file using high-level API
-                result = process_file_with_high_level_api(
-                    file_path, file_ext, config["prompt_key"], config
-                )
+        # Initial status message
+        status_placeholder.info(
+            f"🚀 Starting conversion... Server: {config['ip']}:{config['port']}"
+        )
 
-                # Record end time and calculate duration
-                end_time = time.time()
-                processing_time = end_time - start_time
-                st.session_state.processing_results["end_time"] = end_time
-                st.session_state.processing_results["processing_time"] = processing_time
+        try:
+            # Record start time
+            start_time = time.time()
+            st.session_state.processing_results["start_time"] = start_time
 
-                # Format processing time for display
-                if processing_time < 60:
-                    time_str = f"{processing_time:.2f} seconds"
-                else:
-                    minutes = int(processing_time // 60)
-                    seconds = processing_time % 60
-                    time_str = f"{minutes}m {seconds:.2f}s"
+            # Process file using high-level API with status updates
+            result = process_file_with_high_level_api(
+                file_path, file_ext, config["prompt_key"], config, status_placeholder
+            )
 
-                st.success(f"Processing completed in {time_str}!")
+            # Record end time and calculate duration
+            end_time = time.time()
+            processing_time = end_time - start_time
+            st.session_state.processing_results["end_time"] = end_time
+            st.session_state.processing_results["processing_time"] = processing_time
 
-            except Exception as e:
-                st.error(f"Processing failed: {e}")
-                return
+            # Format processing time for display
+            if processing_time < 60:
+                time_str = f"{processing_time:.2f} seconds"
+            else:
+                minutes = int(processing_time // 60)
+                seconds = processing_time % 60
+                time_str = f"{minutes}m {seconds:.2f}s"
+
+        except Exception as e:
+            status_placeholder.error(f"❌ Processing failed: {e}")
+            return
 
     # Display results if available
     if (
