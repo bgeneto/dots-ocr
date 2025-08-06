@@ -8,7 +8,7 @@ services:
     volumes:
       #download model to local，model url：https://www.modelscope.cn/models/rednote-hilab/dots.ocr
       - ./weights/DotsOCR:/workspace/weights/DotsOCR
-      #- ${HOME}/.cache/huggingface:/root/.cache/huggingface
+      - ./streamlit_app.py:/vllm-workspace/streamlit_app.py
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
     environment:
