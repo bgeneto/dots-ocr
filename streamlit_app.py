@@ -1,7 +1,7 @@
 """
 Layout Inference Web Application
 
-A Streamlit-based layout inference tool that supports image uploads and multiple backend inference engines.
+A Streamlit-based layout inference tool that supports image uploads and pdfs and multiple backend inference engines.
 """
 
 import streamlit as st
@@ -336,7 +336,7 @@ def create_config_sidebar():
 
 def get_file_input():
     """Get file input (images or PDF)"""
-    st.markdown("#### File Input")
+    st.markdown("#### File Input Options:")
 
     input_mode = st.pills(
         label="Select input method",
@@ -344,6 +344,10 @@ def get_file_input():
         key="input_mode",
         label_visibility="collapsed",
     )
+
+    # Handle case when no option is selected (app first load)
+    if input_mode is None:
+        return None, None
 
     if input_mode == "Upload File":
         # File uploader - now supports both images and PDFs
@@ -576,6 +580,15 @@ def display_pdf_preview():
 
     st.markdown(f"**Page {current_page + 1} of {total_pages}**")
 
+    # Determine which image to show
+    current_image = st.session_state.pdf_cache["images"][current_page]
+
+    # If parsed, show results for current page
+    if st.session_state.pdf_cache["is_parsed"] and current_page < len(st.session_state.pdf_cache["results"]):
+        result = st.session_state.pdf_cache["results"][current_page]
+        if result.get("layout_image"):
+            current_image = result["layout_image"]
+
     # Page navigation
     col1, col2, col3 = st.columns([1, 2, 1])
     with col1:
@@ -584,14 +597,8 @@ def display_pdf_preview():
             st.rerun()
 
     with col2:
-        # Show current page image
-        current_image = st.session_state.pdf_cache["images"][current_page]
-
-        # If parsed, show results for current page
-        if st.session_state.pdf_cache["is_parsed"] and current_page < len(st.session_state.pdf_cache["results"]):
-            result = st.session_state.pdf_cache["results"][current_page]
-            if result.get("layout_image"):
-                current_image = result["layout_image"]
+        # Display the current page image
+        st.image(current_image, caption=f"Page {current_page + 1}")
 
     with col3:
         if st.button("Next ▶", disabled=(current_page == total_pages - 1)):
@@ -618,9 +625,7 @@ def display_processing_results(config):
         """)
 
         # Display current page results in preview
-        current_image = display_pdf_preview()
-        if current_image:
-            st.image(current_image, caption="Current Page with Layout Detection")
+        display_pdf_preview()
 
         # Show combined markdown content
         if results["markdown_content"]:
@@ -776,8 +781,12 @@ def process_and_display_results_legacy(output: dict, image: Image.Image, config:
 # ==================== Main Application ====================
 def main():
     """Main application function"""
-    st.set_page_config(page_title="Layout Inference Tool", layout="wide")
-    st.title("🔍 Layout Inference Tool")
+    st.set_page_config(
+        page_title="VLM PDF to Markdown Converter",
+        layout="wide",
+        page_icon="📄"
+    )
+    st.title("📄 VLM PDF to Markdown Converter")
 
     # Configuration
     config = create_config_sidebar()
@@ -788,7 +797,7 @@ def main():
     file_path, file_ext = get_file_input()
 
     # Clear results button
-    if st.button("�️ Clear All Data"):
+    if st.button("🧹 Clear All Data"):
         # Clean up temporary directories
         if st.session_state.processing_results.get("temp_dir"):
             temp_dir = st.session_state.processing_results["temp_dir"]
@@ -833,9 +842,7 @@ def main():
                     # Show PDF preview with navigation
                     preview_col1, preview_col2 = st.columns([2, 1])
                     with preview_col1:
-                        current_image = display_pdf_preview()
-                        if current_image:
-                            st.image(current_image, caption="PDF Preview")
+                        display_pdf_preview()
 
                     with preview_col2:
                         st.markdown("**PDF Information:**")
