@@ -13,6 +13,7 @@ import shutil
 import uuid
 import zipfile
 import base64
+import time
 from PIL import Image
 import requests
 
@@ -66,6 +67,9 @@ if "processing_results" not in st.session_state:
         "session_id": None,
         "result_paths": None,
         "pdf_results": None,  # Store multi-page PDF results
+        "processing_time": None,  # Store processing duration in seconds
+        "start_time": None,  # Store processing start timestamp
+        "end_time": None,  # Store processing end timestamp
     }
 
 # Initialize session state for PDF caching mechanism
@@ -506,6 +510,7 @@ def process_file_with_high_level_api(file_path, file_ext, prompt_mode, config):
                 "session_id": pdf_result["session_id"],
                 "result_paths": None,
                 "pdf_results": pdf_result["parsed_results"],
+                # Timing info will be set by calling function
             }
         )
 
@@ -529,6 +534,7 @@ def process_file_with_high_level_api(file_path, file_ext, prompt_mode, config):
                 "session_id": parse_result["session_id"],
                 "result_paths": parse_result["result_paths"],
                 "pdf_results": None,
+                # Timing info will be set by calling function
             }
         )
 
@@ -647,16 +653,29 @@ def display_processing_results(config):
         # Display combined results
         st.markdown("### Processing Results")
 
-        # Show info
+        # Show info with timing
         total_elements = len(results["cells_data"]) if results["cells_data"] else 0
-        st.info(
-            f"""
+
+        # Format processing time
+        time_info = ""
+        if results["processing_time"] is not None:
+            processing_time = results["processing_time"]
+            if processing_time < 60:
+                time_info = f"- Processing Time: {processing_time:.2f} seconds"
+            else:
+                minutes = int(processing_time // 60)
+                seconds = processing_time % 60
+                time_info = f"- Processing Time: {minutes}m {seconds:.2f}s"
+
+        info_text = f"""
 **PDF Information:**
 - Total Pages: {len(results['pdf_results'])}
 - Total Detected Elements: {total_elements}
 - Session ID: {results['session_id']}
+{time_info}
         """
-        )
+
+        st.info(info_text)
 
         # Display current page results in preview
         display_pdf_preview()
@@ -717,16 +736,29 @@ def display_processing_results(config):
         if results["layout_result"] and results["original_image"]:
             st.markdown("### Processing Results")
 
-            # Show info
+            # Show info with timing
             num_elements = len(results["cells_data"]) if results["cells_data"] else 0
-            st.info(
-                f"""
+
+            # Format processing time
+            time_info = ""
+            if results["processing_time"] is not None:
+                processing_time = results["processing_time"]
+                if processing_time < 60:
+                    time_info = f"- Processing Time: {processing_time:.2f} seconds"
+                else:
+                    minutes = int(processing_time // 60)
+                    seconds = processing_time % 60
+                    time_info = f"- Processing Time: {minutes}m {seconds:.2f}s"
+
+            info_text = f"""
 **Image Information:**
 - Original Size: {results['original_image'].width} x {results['original_image'].height}
 - Detected {num_elements} layout elements
 - Session ID: {results['session_id']}
+{time_info}
             """
-            )
+
+            st.info(info_text)
 
             col1, col2 = st.columns(2)
 
@@ -822,9 +854,9 @@ def process_and_display_results_legacy(output: dict, image: Image.Image, config:
 def main():
     """Main application function"""
     st.set_page_config(
-        page_title="VLM PDF to Markdown Converter", layout="wide", page_icon="📄"
+        page_title="PDF to Markdown Converter", layout="wide", page_icon="📄"
     )
-    st.title("📄 VLM PDF to Markdown Converter")
+    st.title("📄 PDF to Markdown Converter")
 
     # Configuration
     config = create_config_sidebar()
@@ -856,6 +888,9 @@ def main():
             "session_id": None,
             "result_paths": None,
             "pdf_results": None,
+            "processing_time": None,
+            "start_time": None,
+            "end_time": None,
         }
         st.session_state.pdf_cache = {
             "images": [],
@@ -918,16 +953,35 @@ def main():
         return
 
     # Processing button
-    start_button = st.button("🚀 Start Inference", type="primary")
+    start_button = st.button("🚀 Start Conversion", type="secondary")
 
     if start_button and file_path:
         with st.spinner(f"Processing... Server: {config['ip']}:{config['port']}"):
             try:
+                # Record start time
+                start_time = time.time()
+                st.session_state.processing_results["start_time"] = start_time
+
                 # Process file using high-level API
                 result = process_file_with_high_level_api(
                     file_path, file_ext, config["prompt_key"], config
                 )
-                st.success("Processing completed!")
+
+                # Record end time and calculate duration
+                end_time = time.time()
+                processing_time = end_time - start_time
+                st.session_state.processing_results["end_time"] = end_time
+                st.session_state.processing_results["processing_time"] = processing_time
+
+                # Format processing time for display
+                if processing_time < 60:
+                    time_str = f"{processing_time:.2f} seconds"
+                else:
+                    minutes = int(processing_time // 60)
+                    seconds = processing_time % 60
+                    time_str = f"{minutes}m {seconds:.2f}s"
+
+                st.success(f"Processing completed in {time_str}!")
 
             except Exception as e:
                 st.error(f"Processing failed: {e}")

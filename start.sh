@@ -15,10 +15,10 @@ vllm serve /workspace/weights/DotsOCR \
     --trust-remote-code &
 
 # Wait for vLLM to become available
-until curl -f http://localhost:8000/v1/models > /dev/null 2>&1; do
-  echo "Waiting for vLLM server..."
-  sleep 5
-done
+#until curl -f http://localhost:8000/v1/models > /dev/null 2>&1; do
+#  echo "Waiting for vLLM server..."
+#  sleep 5
+#done
 
 echo "vLLM ready! Starting Streamlit..."
 exec streamlit run streamlit_app.py --browser.gatherUsageStats=false
