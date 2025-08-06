@@ -4,7 +4,7 @@ services:
     build: .
     container_name: dots-ocr
     ports:
-      - "8007:7860"
+      - "8007:8501"
     volumes:
       #download model to local，model url：https://www.modelscope.cn/models/rednote-hilab/dots.ocr
       - ./weights/DotsOCR:/workspace/weights/DotsOCR
@@ -19,5 +19,4 @@ services:
         reservations:
           devices:
             - capabilities: [gpu]
-              device_ids: ['0']
-
+              device_ids: ["0"]
