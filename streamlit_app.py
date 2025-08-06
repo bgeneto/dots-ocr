@@ -326,20 +326,6 @@ def create_config_sidebar():
     config["prompt_key"] = st.sidebar.selectbox(
         "Prompt Mode", list(dict_promptmode_to_prompt.keys())
     )
-    config["ip"] = st.sidebar.text_input("Server IP", DEFAULT_CONFIG["ip"])
-    config["port"] = st.sidebar.number_input(
-        "Port", min_value=1000, max_value=9999, value=DEFAULT_CONFIG["port_vllm"]
-    )
-    # config['eos_word'] = st.sidebar.text_input("EOS Word", DEFAULT_CONFIG['eos_word'])
-
-    # Image configuration
-    st.sidebar.subheader("Image Configuration")
-    config["min_pixels"] = st.sidebar.number_input(
-        "Min Pixels", value=DEFAULT_CONFIG["min_pixels"]
-    )
-    config["max_pixels"] = st.sidebar.number_input(
-        "Max Pixels", value=DEFAULT_CONFIG["max_pixels"]
-    )
 
     # Output configuration
     st.sidebar.subheader("Output Configuration")
@@ -348,6 +334,24 @@ def create_config_sidebar():
         value=False,
         help="When unchecked (default), the downloaded markdown will exclude page headers and footers for cleaner content. When checked, headers and footers will be included.",
     )
+
+    config["ip"] = DEFAULT_CONFIG[
+        "ip"
+    ]  # st.sidebar.text_input("Server IP", DEFAULT_CONFIG["ip"])
+    config["port"] = DEFAULT_CONFIG[
+        "port_vllm"
+    ]  # st.sidebar.number_input("Port", min_value=1000, max_value=9999, value=DEFAULT_CONFIG["port_vllm"])
+    # config['eos_word'] = st.sidebar.text_input("EOS Word", DEFAULT_CONFIG['eos_word'])
+
+    # Advanced options in a collapsible expander
+    with st.sidebar.expander("⚙️ Advanced Options", expanded=False):
+        st.subheader("Image Configuration")
+        config["min_pixels"] = st.number_input(
+            "Min Pixels", value=DEFAULT_CONFIG["min_pixels"]
+        )
+        config["max_pixels"] = st.number_input(
+            "Max Pixels", value=DEFAULT_CONFIG["max_pixels"]
+        )
 
     return config
 
@@ -657,48 +661,16 @@ def process_and_display_results_legacy(output: dict, image: Image.Image, config:
         st.error(f"Error processing results: {e}")
 
 
-def display_pdf_preview():
-    """Display PDF preview with page navigation"""
+def display_pdf_preview(key_prefix=""):
+    """Display PDF preview fixed to first page without navigation"""
     if not st.session_state.pdf_cache["images"]:
         return None
 
-    current_page = st.session_state.pdf_cache["current_page"]
     total_pages = st.session_state.pdf_cache["total_pages"]
-
-    st.markdown(f"**Page {current_page + 1} of {total_pages}**")
-
-    # Determine which image to show
-    current_image = st.session_state.pdf_cache["images"][current_page]
-
-    # If parsed, show results for current page
-    if st.session_state.pdf_cache["is_parsed"] and current_page < len(
-        st.session_state.pdf_cache["results"]
-    ):
-        result = st.session_state.pdf_cache["results"][current_page]
-        if result.get("layout_image"):
-            current_image = result["layout_image"]
-
-    # Page navigation
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col1:
-        if st.button("◀ Previous", key="pdf_prev", disabled=(current_page == 0)):
-            st.session_state.pdf_cache["current_page"] = max(0, current_page - 1)
-            st.rerun()
-
-    with col2:
-        # Display the current page image
-        st.image(current_image, caption=f"Page {current_page + 1}")
-
-    with col3:
-        if st.button(
-            "Next ▶", key="pdf_next", disabled=(current_page == total_pages - 1)
-        ):
-            st.session_state.pdf_cache["current_page"] = min(
-                total_pages - 1, current_page + 1
-            )
-            st.rerun()
-
-    return current_image
+    first_image = st.session_state.pdf_cache["images"][0]
+    st.markdown(f"**Page 1 of {total_pages}**")
+    st.image(first_image, caption="Page 1")
+    return first_image
 
 
 def display_processing_results(config):
@@ -734,7 +706,7 @@ def display_processing_results(config):
         st.info(info_text)
 
         # Display current page results in preview
-        display_pdf_preview()
+        display_pdf_preview(key_prefix="processing")
 
         # Show combined markdown content
         if results["markdown_content"]:
@@ -965,24 +937,19 @@ def main():
         try:
             if file_ext == ".pdf":
                 # Load PDF for preview
-                preview_image, page_info = load_file_for_preview(file_path)
-                if preview_image:
+                _, page_info = load_file_for_preview(file_path)
+                if page_info:
                     st.markdown("### File Preview")
-                    # st.write(page_info)
-
-                    # Show PDF preview with navigation
-                    preview_col1, preview_col2 = st.columns([2, 1])
-                    with preview_col1:
-                        display_pdf_preview()
-
-                    with preview_col2:
-                        st.markdown("**PDF Information:**")
-                        st.write(
-                            f"- Total pages: {st.session_state.pdf_cache['total_pages']}"
-                        )
-                        st.write(
-                            f"- Current page: {st.session_state.pdf_cache['current_page'] + 1}"
-                        )
+                    # Show only first page preview
+                    display_pdf_preview()
+                    # Show PDF information
+                    st.markdown("**PDF Information:**")
+                    st.write(
+                        f"- Total pages: {st.session_state.pdf_cache['total_pages']}"
+                    )
+                    st.write(
+                        f"- Current page: {st.session_state.pdf_cache['current_page'] + 1}"
+                    )
 
             else:
                 # Load image for preview
