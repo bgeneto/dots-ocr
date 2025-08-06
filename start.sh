@@ -21,6 +21,6 @@ until curl -f http://localhost:8000/v1/models > /dev/null 2>&1; do
 done
 
 echo "vLLM ready! Starting Streamlit..."
-#exec streamlit run streamlit_app.py --browser.gatherUsageStats=false
-exec python3 gradio_app.py
+exec streamlit run streamlit_app.py --browser.gatherUsageStats=false
+#exec python3 gradio_app.py
 

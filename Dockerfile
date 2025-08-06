@@ -24,24 +24,23 @@ RUN pip install --upgrade pip \
 
 # Copy app
 COPY ./streamlit_app.py .
-COPY ./gradio_app.py .
+#COPY ./gradio_app.py .
 COPY ./start.sh .
 RUN chmod +x start.sh
 COPY ./dots_ocr ./dots_ocr
 COPY ./test_images_dir ./test_images_dir
-RUN cd dots_ocr && pip install -e .
+RUN pip install -e .
 
 # Expose port
-#EXPOSE 8501
-EXPOSE 7860
+EXPOSE 8501
+#EXPOSE 7860 # gradio app
 
 # Streamlit config
 ENV STREAMLIT_SERVER_PORT=8501
 ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
-ENV OMP_NUM_THREADS=4
 
-# Healthcheck (ensure curl is available)
-#HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health || exit 1
+# Healthcheck (for streamlit app, ensure curl is available)
+HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health || exit 1
 
 # Run app
 CMD ["./start.sh"]
