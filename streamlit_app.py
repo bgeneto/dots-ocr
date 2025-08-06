@@ -86,6 +86,22 @@ if "pdf_cache" not in st.session_state:
 # ==================== Utility Functions ====================
 
 
+def get_limited_image_width(image, max_width=800):
+    """
+    Calculate appropriate display width for an image, limiting it for high-res screens
+
+    Args:
+        image: PIL Image object
+        max_width: Maximum width in pixels (default: 800)
+
+    Returns:
+        int: Appropriate width for display
+    """
+    if image.width <= max_width:
+        return image.width
+    return max_width
+
+
 def create_temp_session_dir():
     """Creates a unique temporary directory for each processing request"""
     session_id = uuid.uuid4().hex[:8]
@@ -676,8 +692,9 @@ def process_and_display_results_legacy(output: dict, image: Image.Image, config:
                 draw_bbox=True,
             )
             st.markdown("##### Visualization Result")
-            st.image(new_image, width=new_image.width)
-            # st.write(f"尺寸: {new_image.width} x {new_image.height}")
+            # Limit the width for high-resolution screens
+            display_width = get_limited_image_width(new_image, max_width=600)
+            st.image(new_image, width=display_width)
 
         with col2:
             # st.markdown("##### Markdown格式")
@@ -700,7 +717,10 @@ def display_pdf_preview(key_prefix=""):
     total_pages = st.session_state.pdf_cache["total_pages"]
     first_image = st.session_state.pdf_cache["images"][0]
     st.markdown(f"**Page 1 of {total_pages}**")
-    st.image(first_image, caption="Page 1")
+
+    # Limit the width for high-resolution screens
+    display_width = get_limited_image_width(first_image, max_width=800)
+    st.image(first_image, caption="Page 1", width=display_width)
     return first_image
 
 
@@ -736,6 +756,41 @@ def display_processing_results(config):
 
         st.success(info_text)
 
+        # Download button for combined markdown
+        if results["temp_dir"] and results["session_id"]:
+            include_hf = config["include_headers_footers"]
+            md_file_path = create_combined_markdown_file(
+                results["pdf_results"],
+                results["session_id"],
+                results["temp_dir"],
+                include_headers_footers=include_hf,
+            )
+            if md_file_path:
+                # Generate appropriate filename based on user preference
+                version_suffix = "" if include_hf else "_nohf"
+                filename = (
+                    f"combined_document_{results['session_id']}{version_suffix}.md"
+                )
+
+                # Read file content first to avoid file handle issues
+                try:
+                    with open(md_file_path, "rb") as f:
+                        file_content = f.read()
+
+                    download_label = "📄 Download Combined Markdown"
+                    if not include_hf:
+                        download_label += " (No Headers/Footers)"
+
+                    st.download_button(
+                        label=download_label,
+                        data=file_content,
+                        file_name=filename,
+                        mime="text/markdown",
+                        key="download_combined_md",
+                    )
+                except Exception as e:
+                    st.error(f"Error creating download: {e}")
+
         # Show combined markdown content
         if results["markdown_content"]:
             with st.expander("📝 Combined Markdown Content", expanded=False):
@@ -759,35 +814,6 @@ def display_processing_results(config):
                 if current_result.get("cells_data"):
                     st.markdown("##### Current Page JSON")
                     st.json(current_result["cells_data"])
-
-        # Download button for combined markdown
-        if results["temp_dir"] and results["session_id"]:
-            include_hf = config["include_headers_footers"]
-            md_file_path = create_combined_markdown_file(
-                results["pdf_results"],
-                results["session_id"],
-                results["temp_dir"],
-                include_headers_footers=include_hf,
-            )
-            if md_file_path:
-                # Generate appropriate filename based on user preference
-                version_suffix = "" if include_hf else "_nohf"
-                filename = (
-                    f"combined_document_{results['session_id']}{version_suffix}.md"
-                )
-
-                with open(md_file_path, "rb") as f:
-                    download_label = "📄 Download Combined Markdown"
-                    if not include_hf:
-                        download_label += " (No Headers/Footers)"
-
-                    st.download_button(
-                        label=download_label,
-                        data=f.read(),
-                        file_name=filename,
-                        mime="text/markdown",
-                        key="download_combined_md",
-                    )
 
     else:  # Image results
         if results["layout_result"] and results["original_image"]:
@@ -821,7 +847,11 @@ def display_processing_results(config):
 
             with col1:
                 st.markdown("##### Layout Detection Result")
-                st.image(results["layout_result"])
+                # Limit the width for high-resolution screens
+                display_width = get_limited_image_width(
+                    results["layout_result"], max_width=600
+                )
+                st.image(results["layout_result"], width=display_width)
 
             with col2:
                 if results["markdown_content"]:
@@ -892,8 +922,9 @@ def process_and_display_results_legacy(output: dict, image: Image.Image, config:
                 draw_bbox=True,
             )
             st.markdown("##### Visualization Result")
-            st.image(new_image, width=new_image.width)
-            # st.write(f"尺寸: {new_image.width} x {new_image.height}")
+            # Limit the width for high-resolution screens
+            display_width = get_limited_image_width(new_image, max_width=600)
+            st.image(new_image, width=display_width)
 
         with col2:
             # st.markdown("##### Markdown格式")
@@ -988,7 +1019,9 @@ def main():
 
                     preview_col1, preview_col2 = st.columns([2, 1])
                     with preview_col1:
-                        st.image(image, caption="Image Preview")
+                        # Limit the width for high-resolution screens
+                        display_width = get_limited_image_width(image, max_width=800)
+                        st.image(image, caption="Image Preview", width=display_width)
                     with preview_col2:
                         st.markdown("**Image Information:**")
                         st.write(f"- Width: {image.width}px")
