@@ -784,7 +784,7 @@ def display_processing_results(config):
                     with open(md_file_path, "rb") as f:
                         file_content = f.read()
 
-                    download_label = "📄 Download Combined Markdown"
+                    download_label = "📄 Download Markdown"
                     if not include_hf:
                         download_label += " (No Headers/Footers)"
 
@@ -800,7 +800,7 @@ def display_processing_results(config):
 
         # Show combined markdown content
         if results["markdown_content"]:
-            with st.expander("📝 Combined Markdown Content", expanded=False):
+            with st.expander("📝 Full Markdown Content", expanded=False):
                 st.markdown(results["markdown_content"])
 
         # Show current page details
