@@ -22,7 +22,8 @@ RUN pip install --upgrade pip \
     && pip install -r /tmp/requirements.txt \
     && rm -rf /root/.cache/pip
 
-# Copy app
+# Copy files
+COPY ./setup.py .
 COPY ./streamlit_app.py .
 #COPY ./gradio_app.py .
 COPY ./start.sh .
