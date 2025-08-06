@@ -83,7 +83,133 @@ if "pdf_cache" not in st.session_state:
         "results": [],  # Store parsing results for each page
     }
 
+# Initialize session state for tracking temporary files from URLs
+if "temp_files_to_cleanup" not in st.session_state:
+    st.session_state.temp_files_to_cleanup = []
+
 # ==================== Utility Functions ====================
+
+
+def detect_file_type_from_url(url):
+    """
+    Download a file from URL and detect its actual file type based on content
+
+    Args:
+        url: The URL to download from
+
+    Returns:
+        tuple: (temp_file_path, detected_extension, error_message)
+    """
+    try:
+        # Clean up any old temporary files first
+        cleanup_old_temp_files()
+
+        # Make a HEAD request first to check content type without downloading the full file
+        head_response = requests.head(url, allow_redirects=True, timeout=10)
+        content_type = head_response.headers.get("content-type", "").lower()
+
+        # Map common content types to extensions
+        content_type_map = {
+            "application/pdf": ".pdf",
+            "image/jpeg": ".jpg",
+            "image/jpg": ".jpg",
+            "image/png": ".png",
+            "image/webp": ".webp",
+            "image/bmp": ".bmp",
+            "image/tiff": ".tiff",
+            "image/gif": ".gif",
+        }
+
+        # Try to get extension from content type first
+        detected_ext = None
+        for ct, ext in content_type_map.items():
+            if ct in content_type:
+                detected_ext = ext
+                break
+
+        # If content type detection fails, fall back to URL extension
+        if not detected_ext:
+            url_ext = os.path.splitext(url.split("?")[0])[
+                1
+            ].lower()  # Remove query params
+            if url_ext in [
+                ".pdf",
+                ".jpg",
+                ".jpeg",
+                ".png",
+                ".webp",
+                ".bmp",
+                ".tiff",
+                ".gif",
+            ]:
+                detected_ext = url_ext
+
+        # Download the file
+        response = requests.get(url, timeout=60)
+        response.raise_for_status()
+
+        # If still no extension detected, try to detect from file content
+        if not detected_ext:
+            # Check file signatures from downloaded content
+            content = response.content
+            if len(content) >= 4:
+                if content.startswith(b"%PDF"):
+                    detected_ext = ".pdf"
+                elif content.startswith(b"\x89PNG"):
+                    detected_ext = ".png"
+                elif content.startswith(b"\xff\xd8\xff"):
+                    detected_ext = ".jpg"
+                elif content.startswith(b"GIF8"):
+                    detected_ext = ".gif"
+                elif content.startswith(b"RIFF") and b"WEBP" in content[:16]:
+                    detected_ext = ".webp"
+                else:
+                    # Default to PDF for arxiv-like URLs, otherwise image
+                    if "arxiv.org" in url.lower() or "pdf" in url.lower():
+                        detected_ext = ".pdf"
+                    else:
+                        detected_ext = ".jpg"
+            else:
+                detected_ext = ".jpg"  # Default fallback
+
+        # Validate that detected extension is supported
+        supported_exts = [
+            ".pdf",
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".webp",
+            ".bmp",
+            ".tiff",
+            ".gif",
+        ]
+        if detected_ext not in supported_exts:
+            return None, None, f"Unsupported file type detected: {detected_ext}"
+
+        # Save to temporary file with correct extension
+        with tempfile.NamedTemporaryFile(delete=False, suffix=detected_ext) as tmp_file:
+            tmp_file.write(response.content)
+            # Track this file for cleanup
+            st.session_state.temp_files_to_cleanup.append(tmp_file.name)
+            return tmp_file.name, detected_ext, None
+
+    except requests.exceptions.RequestException as e:
+        return None, None, f"Failed to download file: {str(e)}"
+    except Exception as e:
+        return None, None, f"Error processing URL: {str(e)}"
+
+
+def cleanup_old_temp_files():
+    """Clean up old temporary files from previous URL downloads"""
+    for temp_file in st.session_state.temp_files_to_cleanup[
+        :
+    ]:  # Use slice to create a copy
+        if os.path.exists(temp_file):
+            try:
+                os.unlink(temp_file)
+                st.session_state.temp_files_to_cleanup.remove(temp_file)
+            except Exception:
+                pass  # Ignore errors, file might be in use
 
 
 def get_limited_image_width(image, max_width=800):
@@ -410,8 +536,26 @@ def get_file_input():
         # URL/Path input
         file_url_input = st.text_input("Enter File URL/Path")
         if file_url_input:
-            file_ext = os.path.splitext(file_url_input)[1].lower()
-            return file_url_input, file_ext
+            # Check if it's a URL or local path
+            if file_url_input.startswith(("http://", "https://")):
+                # For URLs, detect file type by downloading and checking content
+                with st.spinner("🔍 Detecting file type from URL..."):
+                    temp_path, detected_ext, error = detect_file_type_from_url(
+                        file_url_input
+                    )
+                    if error:
+                        st.error(f"❌ {error}")
+                        return None, None
+                    elif temp_path and detected_ext:
+                        st.success(f"✅ Detected file type: {detected_ext.upper()}")
+                        return temp_path, detected_ext
+                    else:
+                        st.error("❌ Could not determine file type from URL")
+                        return None, None
+            else:
+                # For local paths, use extension from filename
+                file_ext = os.path.splitext(file_url_input)[1].lower()
+                return file_url_input, file_ext
 
     elif input_mode == "Select Test File":
         # Test file selection
@@ -973,6 +1117,14 @@ def main():
                 except Exception as e:
                     st.warning(f"Failed to clean up temporary directory: {e}")
 
+        # Clean up temporary files from URL downloads
+        for temp_file in st.session_state.temp_files_to_cleanup:
+            if os.path.exists(temp_file):
+                try:
+                    os.unlink(temp_file)
+                except Exception as e:
+                    st.warning(f"Failed to clean up temporary file {temp_file}: {e}")
+
         # Reset all session state
         st.session_state.processing_results = {
             "original_image": None,
@@ -996,6 +1148,7 @@ def main():
             "is_parsed": False,
             "results": [],
         }
+        st.session_state.temp_files_to_cleanup = []
         st.rerun()
 
     # File preview
