@@ -369,6 +369,13 @@ def create_config_sidebar():
             "Max Pixels", value=DEFAULT_CONFIG["max_pixels"]
         )
 
+        st.subheader("Processing Options")
+        config["fitz_preprocess"] = st.checkbox(
+            "Enable Fitz Preprocessing",
+            value=False,
+            help="Use Fitz (PyMuPDF) for advanced image preprocessing. This can improve OCR accuracy for certain types of documents but may increase processing time.",
+        )
+
     return config
 
 
@@ -621,7 +628,7 @@ def process_file_with_high_level_api(
 
         image = legacy_read_image_v2(file_path)
         parse_result = parse_image_with_high_level_api(
-            st.session_state.dots_parser, image, prompt_mode
+            st.session_state.dots_parser, image, prompt_mode, config["fitz_preprocess"]
         )
 
         if status_placeholder:
