@@ -1,3 +1,7 @@
+
+> NOTE: this is a forked repo that should work out-of-the-box by simply running: **docker compose up -d --build**
+
+
 <div align="center">
 
 <p align="center">
