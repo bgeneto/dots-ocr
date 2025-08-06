@@ -1,0 +1,11 @@
+streamlit 
+gradio
+gradio_image_annotation
+PyMuPDF
+openai
+qwen_vl_utils
+flash_attn==2.8.0.post2
+transformers==4.51.3
+huggingface_hub
+modelscope
+accelerate

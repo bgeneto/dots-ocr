@@ -1,0 +1,23 @@
+services:
+  dots-ocr-server:
+    image: dots-ocr
+    build: .
+    container_name: dots-ocr
+    ports:
+      - "8007:7860"
+    volumes:
+      #download model to local，model url：https://www.modelscope.cn/models/rednote-hilab/dots.ocr
+      - ./weights/DotsOCR:/workspace/weights/DotsOCR
+      #- ${HOME}/.cache/huggingface:/root/.cache/huggingface
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - PYTHONPATH=/workspace/weights:$$PYTHONPATH
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+              device_ids: ['0']
+
