@@ -1013,9 +1013,6 @@ def main():
                     st.write(
                         f"- Total pages: {st.session_state.pdf_cache['total_pages']}"
                     )
-                    st.write(
-                        f"- Current page: {st.session_state.pdf_cache['current_page'] + 1}"
-                    )
 
             else:
                 # Load image for preview
