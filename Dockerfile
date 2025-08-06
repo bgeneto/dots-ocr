@@ -20,14 +20,15 @@ RUN pip install --upgrade pip \
 # Copy files
 COPY requirements.txt .
 COPY ./setup.py .
-COPY ./streamlit_app.py .
-#COPY ./gradio_app.py .
-COPY ./start.sh .
-RUN chmod +x start.sh
 COPY ./dots_ocr ./dots_ocr
-COPY ./test_images_dir ./test_images_dir
 RUN pip install -e . \
     && rm -rf /root/.cache/pip
+
+#COPY ./gradio_app.py .
+COPY ./streamlit_app.py .
+COPY ./start.sh .
+RUN chmod +x start.sh
+COPY ./test_images_dir ./test_images_dir
 
 # Expose port
 EXPOSE 8501

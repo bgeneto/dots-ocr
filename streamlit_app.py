@@ -489,16 +489,72 @@ def process_file_with_high_level_api(file_path, file_ext, prompt_mode, config):
     st.session_state.dots_parser.max_pixels = config["max_pixels"]
 
     if file_ext == ".pdf":
-        # PDF processing
-        pdf_result = parse_pdf_with_high_level_api(
-            st.session_state.dots_parser, file_path, prompt_mode
+        # PDF processing with per-page progress
+        pages = load_images_from_pdf(file_path)
+        total_pages = len(pages)
+        # Prepare temporary session
+        temp_dir, session_id = create_temp_session_dir()
+        parsed_results = []
+        all_cells = []
+        all_md = []
+        progress_bar = st.progress(0)
+        for idx, page_img in enumerate(pages):
+            filename = f"demo_{session_id}_page_{idx+1}"
+            # Parse single page
+            results = (
+                st.session_state.dots_parser.parse_image(
+                    input_path=page_img,
+                    filename=filename,
+                    prompt_mode=prompt_mode,
+                    save_dir=temp_dir,
+                )
+                or []
+            )
+            if results:
+                res = results[0]
+                page = {
+                    "page_no": idx + 1,
+                    "layout_image": (
+                        Image.open(res["layout_image_path"])
+                        if res.get("layout_image_path")
+                        else None
+                    ),
+                    "cells_data": (
+                        json.load(open(res["layout_info_path"], encoding="utf-8"))
+                        if res.get("layout_info_path")
+                        else None
+                    ),
+                    "md_content": (
+                        open(res.get("md_content_path"), encoding="utf-8").read()
+                        if res.get("md_content_path")
+                        else None
+                    ),
+                }
+                parsed_results.append(page)
+                if page["cells_data"]:
+                    all_cells.extend(page["cells_data"])
+                if page["md_content"]:
+                    all_md.append(page["md_content"])
+            # Update progress
+            progress_bar.progress((idx + 1) / total_pages)
+        # Combine results
+        combined_md = "\n\n---\n\n".join(all_md)
+        pdf_result = {
+            "parsed_results": parsed_results,
+            "combined_md_content": combined_md,
+            "combined_cells_data": all_cells,
+            "temp_dir": temp_dir,
+            "session_id": session_id,
+            "total_pages": total_pages,
+        }
+        # Cache and processing results update
+        st.session_state.pdf_cache.update(
+            {
+                "is_parsed": True,
+                "results": parsed_results,
+                "total_pages": total_pages,
+            }
         )
-
-        # Update PDF cache with results
-        st.session_state.pdf_cache["is_parsed"] = True
-        st.session_state.pdf_cache["results"] = pdf_result["parsed_results"]
-
-        # Store results in processing_results
         st.session_state.processing_results.update(
             {
                 "original_image": None,
@@ -506,14 +562,12 @@ def process_file_with_high_level_api(file_path, file_ext, prompt_mode, config):
                 "layout_result": None,
                 "markdown_content": pdf_result["combined_md_content"],
                 "cells_data": pdf_result["combined_cells_data"],
-                "temp_dir": pdf_result["temp_dir"],
-                "session_id": pdf_result["session_id"],
+                "temp_dir": temp_dir,
+                "session_id": session_id,
                 "result_paths": None,
-                "pdf_results": pdf_result["parsed_results"],
-                # Timing info will be set by calling function
+                "pdf_results": parsed_results,
             }
         )
-
         return pdf_result
     else:
         # Image processing
@@ -627,7 +681,7 @@ def display_pdf_preview():
     # Page navigation
     col1, col2, col3 = st.columns([1, 2, 1])
     with col1:
-        if st.button("◀ Previous", disabled=(current_page == 0)):
+        if st.button("◀ Previous", key="pdf_prev", disabled=(current_page == 0)):
             st.session_state.pdf_cache["current_page"] = max(0, current_page - 1)
             st.rerun()
 
@@ -636,7 +690,9 @@ def display_pdf_preview():
         st.image(current_image, caption=f"Page {current_page + 1}")
 
     with col3:
-        if st.button("Next ▶", disabled=(current_page == total_pages - 1)):
+        if st.button(
+            "Next ▶", key="pdf_next", disabled=(current_page == total_pages - 1)
+        ):
             st.session_state.pdf_cache["current_page"] = min(
                 total_pages - 1, current_page + 1
             )
@@ -730,6 +786,7 @@ def display_processing_results(config):
                         data=f.read(),
                         file_name=filename,
                         mime="text/markdown",
+                        key="download_combined_md",
                     )
 
     else:  # Image results
@@ -783,6 +840,7 @@ def display_processing_results(config):
                     data=results["markdown_content"],
                     file_name=f"layout_result_{results['session_id']}.md",
                     mime="text/markdown",
+                    key="download_image_md",
                 )
 
 
@@ -867,7 +925,7 @@ def main():
     file_path, file_ext = get_file_input()
 
     # Clear results button
-    if st.button("🧹 Clear All Data"):
+    if st.button("🧹 Clear All Data", key="clear_all_data"):
         # Clean up temporary directories
         if st.session_state.processing_results.get("temp_dir"):
             temp_dir = st.session_state.processing_results["temp_dir"]
@@ -953,7 +1011,9 @@ def main():
         return
 
     # Processing button
-    start_button = st.button("🚀 Start Conversion", type="secondary")
+    start_button = st.button(
+        "🚀 Start Conversion", type="secondary", key="start_conversion"
+    )
 
     if start_button and file_path:
         with st.spinner(f"Processing... Server: {config['ip']}:{config['port']}"):
