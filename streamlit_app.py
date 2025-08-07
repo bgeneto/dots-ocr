@@ -767,13 +767,13 @@ def create_combined_markdown_file(
 
         if md_content:
             if include_page_numbers:
-                combined_md_lines.append(f"# Page {i + 1}\n")
+                combined_md_lines.append(f"\n(Page {i + 1})\n")
             combined_md_lines.append(md_content)
             combined_md_lines.append("\n---\n")
 
     if combined_md_lines:
         combined_md = "\n".join(combined_md_lines)
-        filename = f"combined_document_{session_id}{version_suffix}.md"
+        filename = f"document_{session_id}{version_suffix}.md"
         md_path = os.path.join(temp_dir, filename)
         with open(md_path, "w", encoding="utf-8") as f:
             f.write(combined_md)
@@ -1169,9 +1169,7 @@ def display_processing_results(config):
             if md_file_path:
                 # Generate appropriate filename based on user preference
                 version_suffix = "" if include_hf else "_nohf"
-                filename = (
-                    f"combined_document_{results['session_id']}{version_suffix}.md"
-                )
+                filename = f"document_{results['session_id']}{version_suffix}.md"
 
                 # Read file content first to avoid file handle issues
                 try:
@@ -1206,12 +1204,6 @@ def display_processing_results(config):
 
         current_page = st.session_state.results_page
 
-        # Show current page navigation
-        st.markdown(
-            f"**Viewing Page {current_page + 1} of {total_pages}**",
-            unsafe_allow_html=True,
-        )
-
         # Add pagination buttons
         col1, col2, col3 = st.columns([1, 2, 1])
         with col1:
@@ -1239,7 +1231,7 @@ def display_processing_results(config):
             # Check if we have both markdown and JSON data to determine layout
             has_md_content = bool(current_result.get("md_content"))
             has_json_content = bool(current_result.get("cells_data"))
-            text = f"##### Page {current_page + 1} Preview"
+            text = f"##### Page {current_page + 1} preview ↴"
 
             if has_md_content and has_json_content:
                 # Show both in two columns
