@@ -229,6 +229,16 @@ def cleanup_old_temp_files():
                 pass  # Ignore errors, file might be in use
 
 
+def cleanup_upload_temp_files():
+    """Clean up uploaded temporary files"""
+    temp_dir = os.path.join(tempfile.gettempdir(), "dots_ocr_uploads")
+    if os.path.exists(temp_dir):
+        try:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        except Exception:
+            pass
+
+
 def get_limited_image_width(image, max_width=800):
     """
     Calculate appropriate display width for an image, limiting it for high-res screens
@@ -292,6 +302,8 @@ def load_file_for_preview(file_path):
     else:
         return None, "Unsupported file format"
 
+    # Store the file path for reference
+    st.session_state.pdf_cache["file_path"] = file_path
     st.session_state.pdf_cache["images"] = pages
     st.session_state.pdf_cache["current_page"] = 0
     st.session_state.pdf_cache["total_pages"] = len(pages)
@@ -560,11 +572,28 @@ def get_file_input():
             "Upload Image or PDF", type=["png", "jpg", "jpeg", "pdf"]
         )
         if uploaded_file is not None:
-            # Determine file extension and save to temporary file
+            # Create a persistent temporary file with a consistent name based on file content
             file_ext = os.path.splitext(uploaded_file.name)[1].lower()
-            with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
-                tmp_file.write(uploaded_file.getvalue())
-                return tmp_file.name, file_ext
+
+            # Create a hash of the file content to ensure we use the same temp file for the same upload
+            file_content = uploaded_file.getvalue()
+            file_hash = hash(file_content)
+
+            # Create a persistent temp file path
+            temp_filename = f"uploaded_file_{abs(file_hash)}{file_ext}"
+            temp_dir = os.path.join(tempfile.gettempdir(), "dots_ocr_uploads")
+            os.makedirs(temp_dir, exist_ok=True)
+            temp_file_path = os.path.join(temp_dir, temp_filename)
+
+            # Only write the file if it doesn't exist (to avoid rewriting on every rerun)
+            if not os.path.exists(temp_file_path):
+                with open(temp_file_path, "wb") as f:
+                    f.write(file_content)
+                # Track this file for cleanup
+                if temp_file_path not in st.session_state.temp_files_to_cleanup:
+                    st.session_state.temp_files_to_cleanup.append(temp_file_path)
+
+            return temp_file_path, file_ext
 
     elif input_mode == "Enter File URL/Path":
         # URL/Path input
@@ -1244,12 +1273,10 @@ def main():
                     st.warning(f"Failed to clean up temporary directory: {e}")
 
         # Clean up temporary files from URL downloads
-        for temp_file in st.session_state.temp_files_to_cleanup:
-            if os.path.exists(temp_file):
-                try:
-                    os.unlink(temp_file)
-                except Exception as e:
-                    st.warning(f"Failed to clean up temporary file {temp_file}: {e}")
+        cleanup_old_temp_files()
+
+        # Clean up uploaded temporary files
+        cleanup_upload_temp_files()
 
         # Reset all session state
         st.session_state.processing_results = {
@@ -1276,6 +1303,8 @@ def main():
             "results": [],
         }
         st.session_state.temp_files_to_cleanup = []
+        st.session_state.current_preview_file = None
+        st.session_state.preview_page = 0
         st.rerun()
 
     # File preview with proper session state management
@@ -1324,7 +1353,7 @@ def main():
             st.error(f"Failed to load file: {e}")
             return
     else:
-        st.info("Please upload a file or enter a file URL/path")
+        st.info("Please upload a file or enter a file URL/path above.")
         return
 
     # Processing button with proper state management
