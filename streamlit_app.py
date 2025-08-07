@@ -631,7 +631,7 @@ def create_config_sidebar() -> Dict[str, any]:
         st.subheader("Batch Processing Options")
         config["use_batch_processing"] = st.checkbox(
             "Enable Batch Processing (vLLM)",
-            value=True,
+            value=False,
             help="Use async batch processing with parallel preprocessing for vLLM inference. Preprocessing is done in parallel using multiple threads, while inference uses async batch processing. This can improve performance by reducing HTTP overhead and better utilizing both CPU and GPU resources.",
         )
 
