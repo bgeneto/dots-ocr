@@ -1178,7 +1178,7 @@ def display_processing_results(config):
                     with open(md_file_path, "rb") as f:
                         file_content = f.read()
 
-                    download_label = "⬇️ Download Markdown"
+                    download_label = "💾 Download Markdown"
                     if not include_hf:
                         download_label += " (no headers/footers)"
 
@@ -1243,19 +1243,20 @@ def display_processing_results(config):
             if has_md_content and has_json_content:
                 # Show both in two columns
                 col1, col2 = st.columns(2)
+                text = f"##### Page {current_page + 1} Preview"
                 with col1:
-                    st.markdown("##### Current Page Preview (md)")
+                    st.markdown(text)
                     st.markdown(current_result["md_content"], unsafe_allow_html=True)
                 with col2:
-                    st.markdown("##### Current Page Preview (json)")
+                    st.markdown(text)
                     st.json(current_result["cells_data"])
             elif has_md_content:
                 # Show only markdown in full width
-                st.markdown("##### Current Page Preview (md)")
+                st.markdown(text)
                 st.markdown(current_result["md_content"], unsafe_allow_html=True)
             elif has_json_content:
                 # Show only JSON in full width
-                st.markdown("##### Current Page Preview (json)")
+                st.markdown(text)
                 st.json(current_result["cells_data"])
 
     else:  # Image results
@@ -1323,7 +1324,7 @@ def display_processing_results(config):
             # Download button for markdown
             if results["markdown_content"]:
                 st.download_button(
-                    label="📄 Download Markdown",
+                    label="💾 Download Markdown",
                     data=results["markdown_content"],
                     file_name=f"layout_result_{results['session_id']}.md",
                     mime="text/markdown",
