@@ -83,6 +83,10 @@ if "pdf_cache" not in st.session_state:
         "results": [],  # Store parsing results for each page
     }
 
+# Initialize session state for preview pagination
+if "preview_page" not in st.session_state:
+    st.session_state.preview_page = 0
+
 # Initialize session state for tracking temporary files from URLs
 if "temp_files_to_cleanup" not in st.session_state:
     st.session_state.temp_files_to_cleanup = []
@@ -280,6 +284,9 @@ def load_file_for_preview(file_path):
     st.session_state.pdf_cache["total_pages"] = len(pages)
     st.session_state.pdf_cache["is_parsed"] = False
     st.session_state.pdf_cache["results"] = []
+
+    # Reset preview page when loading new file
+    st.session_state.preview_page = 0
 
     return pages[0], f"Page 1 / {len(pages)}"
 
@@ -773,6 +780,10 @@ def process_file_with_high_level_api(
                 "pdf_results": parsed_results,
             }
         )
+
+        # Reset results page when processing new file
+        st.session_state.results_page = 0
+
         return pdf_result
     else:
         # Image processing
@@ -872,18 +883,40 @@ def process_and_display_results_legacy(output: dict, image: Image.Image, config:
 
 
 def display_pdf_preview(key_prefix=""):
-    """Display PDF preview fixed to first page without navigation"""
+    """Display PDF preview with pagination controls"""
     if not st.session_state.pdf_cache["images"]:
         return None
 
     total_pages = st.session_state.pdf_cache["total_pages"]
-    first_image = st.session_state.pdf_cache["images"][0]
-    st.markdown(f"**Page 1 of {total_pages}**")
+    current_page = st.session_state.preview_page
+
+    # Get current page image
+    current_image = st.session_state.pdf_cache["images"][current_page]
+    st.markdown(f"**Page {current_page + 1} of {total_pages}**")
 
     # Limit the width for high-resolution screens
-    display_width = get_limited_image_width(first_image, max_width=800)
-    st.image(first_image, caption="Page 1", width=display_width)
-    return first_image
+    display_width = get_limited_image_width(current_image, max_width=800)
+    st.image(current_image, caption=f"Page {current_page + 1}", width=display_width)
+
+    # Add pagination controls
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col1:
+        if st.button(
+            "⬅️ Previous", key=f"{key_prefix}prev_preview", disabled=current_page == 0
+        ):
+            st.session_state.preview_page = max(0, current_page - 1)
+            st.rerun()
+
+    with col3:
+        if st.button(
+            "Next ➡️",
+            key=f"{key_prefix}next_preview",
+            disabled=current_page == total_pages - 1,
+        ):
+            st.session_state.preview_page = min(total_pages - 1, current_page + 1)
+            st.rerun()
+
+    return current_image
 
 
 def display_processing_results(config):
@@ -960,13 +993,37 @@ def display_processing_results(config):
             with st.expander("📝 Full Markdown Content", expanded=False):
                 st.markdown(results["markdown_content"])
 
-        # Show current page details
-        current_page = st.session_state.pdf_cache["current_page"]
-        if st.session_state.pdf_cache["is_parsed"] and current_page < len(
-            st.session_state.pdf_cache["results"]
-        ):
+        # Add pagination controls for individual page results
+        total_pages = len(results["pdf_results"])
+        if "results_page" not in st.session_state:
+            st.session_state.results_page = 0
 
-            current_result = st.session_state.pdf_cache["results"][current_page]
+        current_page = st.session_state.results_page
+
+        # Show current page navigation
+        st.markdown(f"**Viewing Page {current_page + 1} of {total_pages}**")
+
+        # Add pagination buttons
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col1:
+            if st.button(
+                "⬅️ Previous Page", key="prev_results", disabled=current_page == 0
+            ):
+                st.session_state.results_page = max(0, current_page - 1)
+                st.rerun()
+
+        with col3:
+            if st.button(
+                "Next Page ➡️",
+                key="next_results",
+                disabled=current_page == total_pages - 1,
+            ):
+                st.session_state.results_page = min(total_pages - 1, current_page + 1)
+                st.rerun()
+
+        # Show current page details
+        if st.session_state.results_page < len(results["pdf_results"]):
+            current_result = results["pdf_results"][st.session_state.results_page]
 
             col1, col2 = st.columns(2)
             with col1:
