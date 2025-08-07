@@ -80,14 +80,22 @@ def initialize_session_state():
     """Initialize all session state variables"""
     # Initialize session state for DotsOCRParser
     if "dots_parser" not in st.session_state:
-        st.session_state.dots_parser = DotsOCRParser(
-            ip=DEFAULT_CONFIG["ip"],
-            port=DEFAULT_CONFIG["port_vllm"],
-            dpi=200,
-            min_pixels=DEFAULT_CONFIG["min_pixels"],
-            max_pixels=DEFAULT_CONFIG["max_pixels"],
-            num_thread=16,  # Default thread count
-        )
+        try:
+            st.session_state.dots_parser = DotsOCRParser(
+                ip=DEFAULT_CONFIG["ip"],
+                port=DEFAULT_CONFIG["port_vllm"],
+                dpi=200,
+                min_pixels=DEFAULT_CONFIG["min_pixels"],
+                max_pixels=DEFAULT_CONFIG["max_pixels"],
+                num_thread=16,  # Default thread count
+            )
+        except Exception as e:
+            st.error(f"Failed to initialize DotsOCRParser: {str(e)}")
+            st.error(
+                "Please ensure the inference server is running at "
+                f"{DEFAULT_CONFIG['ip']}:{DEFAULT_CONFIG['port_vllm']}"
+            )
+            st.stop()  # Stop execution if parser can't be initialized
 
     # Initialize session state for processing results
     if "processing_results" not in st.session_state:
@@ -755,14 +763,22 @@ def process_file_with_high_level_api(
     """Process file using high-level API with progress updates"""
     # Ensure parser is initialized
     if "dots_parser" not in st.session_state:
-        st.session_state.dots_parser = DotsOCRParser(
-            ip=config["ip"],
-            port=config["port"],
-            dpi=200,
-            min_pixels=config["min_pixels"],
-            max_pixels=config["max_pixels"],
-            num_thread=16,
-        )
+        try:
+            st.session_state.dots_parser = DotsOCRParser(
+                ip=config["ip"],
+                port=config["port"],
+                dpi=200,
+                min_pixels=config["min_pixels"],
+                max_pixels=config["max_pixels"],
+                num_thread=16,
+            )
+        except Exception as e:
+            st.error(f"Failed to initialize DotsOCRParser: {str(e)}")
+            st.error(
+                "Please ensure the inference server is running at "
+                f"{config['ip']}:{config['port']}"
+            )
+            st.stop()  # Stop execution if parser can't be initialized
 
     # Update parser configuration
     st.session_state.dots_parser.ip = config["ip"]
