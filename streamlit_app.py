@@ -621,14 +621,6 @@ def create_config_sidebar() -> Dict[str, any]:
             help="Display a visual progress bar during PDF processing with a fixed pace estimate (12 pages/minute).",
         )
 
-    # Add copyright footer
-    st.sidebar.markdown(
-        "<hr style='margin-top:2em; margin-bottom:0.5em; border:1px solid #eee;'>"
-        "<div style='text-align:center; color:gray; font-size:0.9em;'>"
-        "© 2025 bgeneto. All rights reserved."
-        "</div>",
-        unsafe_allow_html=True,
-    )
     return config
 
 
@@ -1519,6 +1511,15 @@ def main() -> None:
     config = create_config_sidebar()
     prompt = dict_promptmode_to_prompt[config["prompt_key"]]
     st.sidebar.info(f"Current Prompt: {prompt}")
+
+    # Add copyright footer
+    st.sidebar.markdown(
+        "<hr style='margin-top:2em; margin-bottom:0.5em; border:1px solid #eee;'>"
+        "<div style='text-align:center; color:gray; font-size:0.9em;'>"
+        "© 2025 bgeneto. All rights reserved."
+        "</div>",
+        unsafe_allow_html=True,
+    )
 
     # File input (images and PDFs)
     file_path, file_ext = get_file_input()
