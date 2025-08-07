@@ -87,6 +87,14 @@ if "pdf_cache" not in st.session_state:
 if "preview_page" not in st.session_state:
     st.session_state.preview_page = 0
 
+# Initialize session state for current preview file tracking
+if "current_preview_file" not in st.session_state:
+    st.session_state.current_preview_file = None
+
+# Initialize session state for processing flags
+if "is_processing" not in st.session_state:
+    st.session_state.is_processing = False
+
 # Initialize session state for tracking temporary files from URLs
 if "temp_files_to_cleanup" not in st.session_state:
     st.session_state.temp_files_to_cleanup = []
@@ -479,13 +487,13 @@ def create_config_sidebar():
     # Output configuration
     st.sidebar.subheader("Output Configuration")
     config["include_headers_footers"] = st.sidebar.checkbox(
-        "Include Page Headers & Footers in Markdown",
+        "Include Page Headers & Footers",
         value=False,
         help="When unchecked (default), the downloaded markdown will exclude page headers and footers for cleaner content. When checked, headers and footers will be included.",
     )
 
     config["include_page_numbers"] = st.sidebar.checkbox(
-        "Include Page Numbers in Markdown",
+        "Include Page Numbers",
         value=True,
         help="When checked (default), page numbers will be included as headers in the final markdown file.",
     )
@@ -902,14 +910,16 @@ def display_pdf_preview(key_prefix=""):
     col1, col2, col3 = st.columns([1, 2, 1])
     with col1:
         if st.button(
-            "⬅️ Previous", key=f"{key_prefix}prev_preview", disabled=current_page == 0
+            "⬅️ Previous Page",
+            key=f"{key_prefix}prev_preview",
+            disabled=current_page == 0,
         ):
             st.session_state.preview_page = max(0, current_page - 1)
             st.rerun()
 
     with col3:
         if st.button(
-            "Next ➡️",
+            "Next Page ➡️",
             key=f"{key_prefix}next_preview",
             disabled=current_page == total_pages - 1,
         ):
@@ -1001,7 +1011,10 @@ def display_processing_results(config):
         current_page = st.session_state.results_page
 
         # Show current page navigation
-        st.markdown(f"**Viewing Page {current_page + 1} of {total_pages}**")
+        st.markdown(
+            f"**Viewing Page {current_page + 1} of {total_pages}**",
+            unsafe_allow_html=True,
+        )
 
         # Add pagination buttons
         col1, col2, col3 = st.columns([1, 2, 1])
@@ -1077,7 +1090,7 @@ def display_processing_results(config):
             with col2:
                 if results["markdown_content"]:
                     st.markdown("##### Markdown Content")
-                    st.markdown(results["markdown_content"])
+                    st.markdown(results["markdown_content"], unsafe_allow_html=True)
 
             # Show JSON data
             if results["cells_data"]:
@@ -1221,15 +1234,20 @@ def main():
         st.session_state.temp_files_to_cleanup = []
         st.rerun()
 
-    # File preview
+    # File preview with proper session state management
     if file_path and file_ext:
         try:
             if file_ext == ".pdf":
-                # Load PDF for preview
-                _, page_info = load_file_for_preview(file_path)
-                if page_info:
+                # Only load PDF for preview if it's a new file
+                if st.session_state.current_preview_file != file_path:
+                    _, page_info = load_file_for_preview(file_path)
+                    st.session_state.current_preview_file = file_path
+                else:
+                    page_info = f"Page 1 / {st.session_state.pdf_cache['total_pages']}"
+
+                if st.session_state.pdf_cache["images"]:
                     st.markdown("### File Preview")
-                    # Show only first page preview
+                    # Show PDF preview with pagination
                     display_pdf_preview()
                     # Show PDF information
                     st.markdown("**PDF Information:**")
@@ -1265,12 +1283,15 @@ def main():
         st.info("Please upload a file or enter a file URL/path")
         return
 
-    # Processing button
+    # Processing button with proper state management
     start_button = st.button(
         "🚀 Start Conversion", type="secondary", key="start_conversion"
     )
 
-    if start_button and file_path:
+    if start_button and file_path and not st.session_state.is_processing:
+        # Set processing flag to prevent interruption
+        st.session_state.is_processing = True
+
         # Create a placeholder for dynamic status updates
         status_placeholder = st.empty()
 
@@ -1295,17 +1316,20 @@ def main():
             st.session_state.processing_results["end_time"] = end_time
             st.session_state.processing_results["processing_time"] = processing_time
 
-            # Format processing time for display
-            if processing_time < 60:
-                time_str = f"{processing_time:.2f} seconds"
-            else:
-                minutes = int(processing_time // 60)
-                seconds = processing_time % 60
-                time_str = f"{minutes}m {seconds:.2f}s"
-
         except Exception as e:
             status_placeholder.error(f"❌ Processing failed: {e}")
+            st.session_state.is_processing = False
             return
+
+        # Reset processing flag
+        st.session_state.is_processing = False
+
+    # Display results if available
+    if (
+        st.session_state.processing_results["markdown_content"]
+        or st.session_state.processing_results["pdf_results"]
+    ):
+        display_processing_results(config)
 
     # Display results if available
     if (
