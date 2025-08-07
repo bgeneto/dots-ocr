@@ -477,6 +477,12 @@ def create_config_sidebar():
         help="When unchecked (default), the downloaded markdown will exclude page headers and footers for cleaner content. When checked, headers and footers will be included.",
     )
 
+    config["include_page_numbers"] = st.sidebar.checkbox(
+        "Include Page Numbers in Markdown",
+        value=True,
+        help="When checked (default), page numbers will be included as headers in the final markdown file.",
+    )
+
     config["ip"] = DEFAULT_CONFIG[
         "ip"
     ]  # st.sidebar.text_input("Server IP", DEFAULT_CONFIG["ip"])
@@ -578,7 +584,11 @@ def get_file_input():
 
 
 def create_combined_markdown_file(
-    pdf_results, session_id, temp_dir, include_headers_footers=False
+    pdf_results,
+    session_id,
+    temp_dir,
+    include_headers_footers=False,
+    include_page_numbers=True,
 ):
     """Create a combined markdown file from all PDF pages
 
@@ -625,7 +635,8 @@ def create_combined_markdown_file(
                 md_content = result["md_content"]
 
         if md_content:
-            combined_md_lines.append(f"# Page {i + 1}\n")
+            if include_page_numbers:
+                combined_md_lines.append(f"# Page {i + 1}\n")
             combined_md_lines.append(md_content)
             combined_md_lines.append("\n---\n")
 
@@ -910,11 +921,13 @@ def display_processing_results(config):
         # Download button for combined markdown
         if results["temp_dir"] and results["session_id"]:
             include_hf = config["include_headers_footers"]
+            include_page_numbers = config["include_page_numbers"]
             md_file_path = create_combined_markdown_file(
                 results["pdf_results"],
                 results["session_id"],
                 results["temp_dir"],
                 include_headers_footers=include_hf,
+                include_page_numbers=include_page_numbers,
             )
             if md_file_path:
                 # Generate appropriate filename based on user preference
