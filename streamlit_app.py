@@ -22,7 +22,6 @@ from dots_ocr.utils import dict_promptmode_to_prompt
 from dots_ocr.utils.format_transformer import layoutjson2md
 from dots_ocr.utils.layout_utils import draw_layout_on_image, post_process_cells
 from dots_ocr.utils.image_utils import get_input_dimensions, get_image_by_fitz_doc
-from dots_ocr.model.inference import inference_with_vllm
 from dots_ocr.utils.consts import MIN_PIXELS, MAX_PIXELS
 from dots_ocr.utils.demo_utils.display import read_image
 from dots_ocr.utils.doc_utils import load_images_from_pdf
@@ -53,6 +52,7 @@ if "dots_parser" not in st.session_state:
         dpi=200,
         min_pixels=DEFAULT_CONFIG["min_pixels"],
         max_pixels=DEFAULT_CONFIG["max_pixels"],
+        num_thread=16,  # Default thread count
     )
 
 # Initialize session state for processing results
@@ -70,6 +70,7 @@ if "processing_results" not in st.session_state:
         "processing_time": None,  # Store processing duration in seconds
         "start_time": None,  # Store processing start timestamp
         "end_time": None,  # Store processing end timestamp
+        "threads_used": None,  # Store actual number of threads used for processing
     }
 
 # Initialize session state for PDF caching mechanism
@@ -98,6 +99,10 @@ if "is_processing" not in st.session_state:
 # Initialize session state for tracking temporary files from URLs
 if "temp_files_to_cleanup" not in st.session_state:
     st.session_state.temp_files_to_cleanup = []
+
+# Initialize session state for results pagination
+if "results_page" not in st.session_state:
+    st.session_state.results_page = 0
 
 # ==================== Utility Functions ====================
 
@@ -523,6 +528,14 @@ def create_config_sidebar():
             help="Use Fitz (PyMuPDF) for advanced image preprocessing. This can improve OCR accuracy for certain types of documents but may increase processing time.",
         )
 
+        config["num_threads"] = st.slider(
+            "Concurrent Threads",
+            min_value=1,
+            max_value=32,
+            value=16,
+            help="Number of concurrent threads for PDF processing. Higher values can speed up multi-page PDF processing but may increase memory usage.",
+        )
+
     return config
 
 
@@ -686,115 +699,143 @@ def process_file_with_high_level_api(
     st.session_state.dots_parser.port = config["port"]
     st.session_state.dots_parser.min_pixels = config["min_pixels"]
     st.session_state.dots_parser.max_pixels = config["max_pixels"]
+    # Note: num_thread will be optimized per file type below
 
     if file_ext == ".pdf":
-        # PDF processing with per-page progress
+        # PDF processing with parallel processing
         if status_placeholder:
             status_placeholder.info("📋 Loading PDF pages...")
+
+        # First, get the number of pages to optimize thread count
+        from dots_ocr.utils.doc_utils import load_images_from_pdf
 
         pages = load_images_from_pdf(file_path)
         total_pages = len(pages)
 
-        if status_placeholder:
-            status_placeholder.info(f"📄 Processing PDF with {total_pages} pages...")
-
-        # Prepare temporary session
-        temp_dir, session_id = create_temp_session_dir()
-        parsed_results = []
-        all_cells = []
-        all_md = []
-        progress_bar = st.progress(0)
-
-        for idx, page_img in enumerate(pages):
-            current_page = idx + 1
-
-            # Update status with current page info
+        # Optimize thread count: don't use more threads than pages
+        optimal_threads = min(config["num_threads"], total_pages)
+        if optimal_threads != config["num_threads"]:
             if status_placeholder:
                 status_placeholder.info(
-                    f"🔄 Processing page {current_page} of {total_pages}... Server: {config['ip']}:{config['port']}"
+                    f"📊 Optimizing threads: Using {optimal_threads} threads for {total_pages} pages (instead of {config['num_threads']})"
                 )
 
-            filename = f"demo_{session_id}_page_{current_page}"
-            # Parse single page
-            results = (
-                st.session_state.dots_parser.parse_image(
-                    input_path=page_img,
-                    filename=filename,
-                    prompt_mode=prompt_mode,
-                    save_dir=temp_dir,
-                )
-                or []
-            )
-            if results:
-                res = results[0]
-                page = {
-                    "page_no": current_page,
-                    "layout_image": (
-                        Image.open(res["layout_image_path"])
-                        if res.get("layout_image_path")
-                        else None
-                    ),
-                    "cells_data": (
-                        json.load(open(res["layout_info_path"], encoding="utf-8"))
-                        if res.get("layout_info_path")
-                        else None
-                    ),
-                    "md_content": (
-                        open(res.get("md_content_path"), encoding="utf-8").read()
-                        if res.get("md_content_path")
-                        else None
-                    ),
-                }
-                parsed_results.append(page)
-                if page["cells_data"]:
-                    all_cells.extend(page["cells_data"])
-                if page["md_content"]:
-                    all_md.append(page["md_content"])
-            # Update progress
-            progress_bar.progress(current_page / total_pages)
-        # Combine results
+        # Update parser with optimal thread count
+        st.session_state.dots_parser.num_thread = optimal_threads
+
+        # Use the high-level parse_pdf method directly for parallel processing
+        temp_dir, session_id = create_temp_session_dir()
+        filename = f"demo_{session_id}"
+
         if status_placeholder:
             status_placeholder.info(
-                f"📝 Finalizing PDF processing ({total_pages} pages)..."
+                f"🚀 Processing {total_pages} PDF pages in parallel using {optimal_threads} threads..."
             )
 
-        combined_md = "\n\n---\n\n".join(all_md)
-        pdf_result = {
-            "parsed_results": parsed_results,
-            "combined_md_content": combined_md,
-            "combined_cells_data": all_cells,
-            "temp_dir": temp_dir,
-            "session_id": session_id,
-            "total_pages": total_pages,
-        }
-        # Cache and processing results update
-        st.session_state.pdf_cache.update(
-            {
-                "is_parsed": True,
-                "results": parsed_results,
-                "total_pages": total_pages,
-            }
-        )
-        st.session_state.processing_results.update(
-            {
-                "original_image": None,
-                "processed_image": None,
-                "layout_result": None,
-                "markdown_content": pdf_result["combined_md_content"],
-                "cells_data": pdf_result["combined_cells_data"],
+        try:
+            # This will process all pages concurrently using ThreadPool
+            results = st.session_state.dots_parser.parse_pdf(
+                input_path=file_path,
+                filename=filename,
+                prompt_mode=prompt_mode,
+                save_dir=temp_dir,
+            )
+
+            if status_placeholder:
+                status_placeholder.info("📝 Finalizing PDF processing...")
+
+            # Convert results to the expected format
+            parsed_results = []
+            all_cells = []
+            all_md = []
+
+            for result in results:
+                page = {
+                    "page_no": result.get("page_no", 0),
+                    "layout_image": (
+                        Image.open(result["layout_image_path"])
+                        if result.get("layout_image_path")
+                        and os.path.exists(result["layout_image_path"])
+                        else None
+                    ),
+                    "cells_data": None,
+                    "md_content": None,
+                }
+
+                # Read JSON data
+                if result.get("layout_info_path") and os.path.exists(
+                    result["layout_info_path"]
+                ):
+                    with open(result["layout_info_path"], "r", encoding="utf-8") as f:
+                        page["cells_data"] = json.load(f)
+                        all_cells.extend(page["cells_data"])
+
+                # Read markdown content
+                if result.get("md_content_path") and os.path.exists(
+                    result["md_content_path"]
+                ):
+                    with open(result["md_content_path"], "r", encoding="utf-8") as f:
+                        page["md_content"] = f.read()
+                        all_md.append(page["md_content"])
+
+                parsed_results.append(page)
+
+            # Sort results by page number to ensure correct order
+            parsed_results.sort(key=lambda x: x["page_no"])
+
+            # Combine results
+            combined_md = "\n\n---\n\n".join(all_md) if all_md else ""
+
+            pdf_result = {
+                "parsed_results": parsed_results,
+                "combined_md_content": combined_md,
+                "combined_cells_data": all_cells,
                 "temp_dir": temp_dir,
                 "session_id": session_id,
-                "result_paths": None,
-                "pdf_results": parsed_results,
+                "total_pages": len(results),
+                "threads_used": optimal_threads,  # Store actual threads used
             }
-        )
 
-        # Reset results page when processing new file
-        st.session_state.results_page = 0
+            # Cache and processing results update
+            st.session_state.pdf_cache.update(
+                {
+                    "is_parsed": True,
+                    "results": parsed_results,
+                    "total_pages": len(results),
+                }
+            )
+            st.session_state.processing_results.update(
+                {
+                    "original_image": None,
+                    "processed_image": None,
+                    "layout_result": None,
+                    "markdown_content": pdf_result["combined_md_content"],
+                    "cells_data": pdf_result["combined_cells_data"],
+                    "temp_dir": temp_dir,
+                    "session_id": session_id,
+                    "result_paths": None,
+                    "pdf_results": parsed_results,
+                    "threads_used": optimal_threads,
+                }
+            )
 
-        return pdf_result
+            # Reset results page when processing new file
+            if "results_page" not in st.session_state:
+                st.session_state.results_page = 0
+            else:
+                st.session_state.results_page = 0
+
+            return pdf_result
+
+        except Exception as e:
+            if status_placeholder:
+                status_placeholder.error(f"❌ PDF processing failed: {str(e)}")
+            raise e
+
     else:
-        # Image processing
+        # Image processing (single thread is sufficient)
+        st.session_state.dots_parser.num_thread = 1
+
         if status_placeholder:
             status_placeholder.info(
                 f"🖼️ Processing image... Server: {config['ip']}:{config['port']}"
@@ -820,6 +861,7 @@ def process_file_with_high_level_api(
                 "session_id": parse_result["session_id"],
                 "result_paths": parse_result["result_paths"],
                 "pdf_results": None,
+                "threads_used": 1,  # Single image uses 1 thread
                 # Timing info will be set by calling function
             }
         )
@@ -955,6 +997,7 @@ def display_processing_results(config):
 **PDF Information:**
 - Total Pages: {len(results['pdf_results'])}
 - Total Detected Elements: {total_elements}
+- Processing Threads: {results.get('threads_used', config.get('num_threads', 16))}
 - Session ID: {results['session_id']}
 {time_info}
         """
@@ -1222,6 +1265,7 @@ def main():
             "processing_time": None,
             "start_time": None,
             "end_time": None,
+            "threads_used": None,
         }
         st.session_state.pdf_cache = {
             "images": [],
