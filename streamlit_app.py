@@ -1239,11 +1239,11 @@ def display_processing_results(config):
             # Check if we have both markdown and JSON data to determine layout
             has_md_content = bool(current_result.get("md_content"))
             has_json_content = bool(current_result.get("cells_data"))
+            text = f"##### Page {current_page + 1} Preview"
 
             if has_md_content and has_json_content:
                 # Show both in two columns
                 col1, col2 = st.columns(2)
-                text = f"##### Page {current_page + 1} Preview"
                 with col1:
                     st.markdown(text)
                     st.markdown(current_result["md_content"], unsafe_allow_html=True)
