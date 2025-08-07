@@ -1566,36 +1566,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-"""
-Enhanced Progress Tracking Implementation:
-
-This implementation provides two types of progress tracking for PDF conversion:
-
-1. Standard Progress Tracking (default):
-   - Shows text-based progress updates in the status area
-   - Displays: "🔄 Processing pages: 12/36 (33.3%) - Avg: 2.1s/page - ETA: 50s"
-   - Uses file monitoring to detect completed pages
-   - Updates every 2 seconds
-
-2. Enhanced Progress Bar (optional):
-   - Shows a visual progress bar in addition to text updates
-   - Configurable via "Show Progress Bar" checkbox in Advanced Options
-   - Updates every 1.5 seconds for more responsive feedback
-   - Automatically cleans up progress display when complete
-
-Both implementations:
-- Monitor actual file creation to track real progress
-- Calculate average processing time per page
-- Estimate remaining time based on current performance
-- Handle error conditions gracefully
-- Support parallel processing with optimal thread count
-- Stop progress tracking cleanly on completion or error
-
-The progress tracking works by:
-1. Monitoring the temp directory for newly created result files
-2. Using a background thread to update the progress display
-3. Communicating progress via thread-safe queues
-4. Automatically stopping when processing is complete
-"""
