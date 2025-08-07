@@ -52,6 +52,12 @@ def inference_with_vllm(
         return response
     except requests.exceptions.RequestException as e:
         print(f"request error: {e}")
+        # Re-raise connection errors so they can be handled properly
+        if any(
+            keyword in str(e).lower()
+            for keyword in ["connection", "timeout", "refused", "unreachable"]
+        ):
+            raise e
         return None
 
 
@@ -93,8 +99,14 @@ async def inference_with_vllm_async(
             top_p=top_p,
         )
         return response.choices[0].message.content
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         print(f"async request error: {e}")
+        # Re-raise connection errors so they can be handled properly
+        if any(
+            keyword in str(e).lower()
+            for keyword in ["connection", "timeout", "refused", "unreachable"]
+        ):
+            raise e
         return None
     finally:
         await client.close()
@@ -153,11 +165,25 @@ def inference_with_vllm_batch(
 
     # Handle any exceptions in the results
     processed_results = []
+    connection_errors = []
+
     for i, result in enumerate(results):
         if isinstance(result, Exception):
-            print(f"Error processing image {i}: {result}")
+            # Check if it's a connection error
+            if any(
+                keyword in str(result).lower()
+                for keyword in ["connection", "timeout", "refused", "unreachable"]
+            ):
+                connection_errors.append(result)
+                print(f"Connection error for image {i}: {result}")
+            else:
+                print(f"Error processing image {i}: {result}")
             processed_results.append(None)
         else:
             processed_results.append(result)
+
+    # If we have connection errors, raise the first one to alert the user
+    if connection_errors:
+        raise connection_errors[0]
 
     return processed_results

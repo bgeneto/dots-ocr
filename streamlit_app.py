@@ -1685,6 +1685,14 @@ def main() -> None:
                     "❌ Failed to initialize DotsOCRParser. Please ensure the inference server is running at "
                     f"{config['ip']}:{config['port']} and try again."
                 )
+            elif any(
+                keyword in str(e).lower()
+                for keyword in ["connection", "timeout", "refused", "unreachable"]
+            ):
+                status_placeholder.error(
+                    f"❌ Connection Error: Cannot connect to vLLM server at {config['ip']}:{config['port']}. "
+                    f"Please ensure the server is running and accessible.\n\nDetails: {e}"
+                )
             else:
                 status_placeholder.error(f"❌ Processing failed: {e}")
             st.session_state.is_processing = False

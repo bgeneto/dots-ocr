@@ -383,16 +383,43 @@ class DotsOCRParser:
                         max_completion_tokens=self.max_completion_tokens,
                     )
                 except Exception as e:
+                    # Check if it's a connection error - don't fall back for these
+                    if any(
+                        keyword in str(e).lower()
+                        for keyword in [
+                            "connection",
+                            "timeout",
+                            "refused",
+                            "unreachable",
+                        ]
+                    ):
+                        print(f"Connection error during batch processing: {e}")
+                        raise e  # Re-raise connection errors
+
                     print(
                         f"Batch processing failed, falling back to individual processing: {e}"
                     )
-                    # Fallback to individual processing
+                    # Fallback to individual processing for non-connection errors
                     responses = []
                     for img, prompt in zip(processed_images, prompts):
                         try:
                             response = self._inference_with_vllm(img, prompt)
                             responses.append(response)
                         except Exception as e2:
+                            # Also check for connection errors in individual processing
+                            if any(
+                                keyword in str(e2).lower()
+                                for keyword in [
+                                    "connection",
+                                    "timeout",
+                                    "refused",
+                                    "unreachable",
+                                ]
+                            ):
+                                print(
+                                    f"Connection error during individual processing: {e2}"
+                                )
+                                raise e2  # Re-raise connection errors
                             print(f"Individual processing also failed: {e2}")
                             responses.append(None)
 
