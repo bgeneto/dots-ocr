@@ -184,13 +184,13 @@ def layoutjson2md(
 def fix_streamlit_formulas(md: str, use_mathdollar: bool = False) -> str:
     """
     Fixes the format of formulas in Markdown to ensure they display correctly in Streamlit:
-      1) safely escapes any standalone '$' followed by a digit (e.g. $5.00, R$12.50),
+      1) safely escapes any standalone '$' followed by a digit (e.g. $5.00, R$ 12.50),
          but only *outside* of any $…$ or $$…$$ math blocks;
       2) then normalizes all $$…$$ into a proper display‐math block with its own lines.
 
     Args:
         md (str): The Markdown text to fix.
-        use_mathdollar (bool): If True, use \mathdollar{} for currency (better for KaTeX display).
+        use_mathdollar (bool): If True, use $\mathdollar$ for currency (better for KaTeX display).
                               If False, use \$ escape (better for file downloads).
 
     Returns:
@@ -201,20 +201,39 @@ def fix_streamlit_formulas(md: str, use_mathdollar: bool = False) -> str:
     def escape_currency(txt: str) -> str:
         if use_mathdollar:
             # Use $\mathdollar$ for KaTeX compatibility in display (math mode required)
-            return re.sub(r"(?<!\\)\$(?=\d)", r"$\\mathdollar$", txt)
+            return re.sub(r"(?<!\\)\$(?=\s*\d)", r"$\\mathdollar$", txt)
         else:
             # Use \$ for file downloads
-            return re.sub(r"(?<!\\)\$(?=\d)", r"\\$", txt)
+            return re.sub(r"(?<!\\)\$(?=\s*\d)", r"\\$", txt)
 
-    # 1) Carve out EVERY math token ($…$ or $$…$$), so we don't touch them
-    math_split = re.split(r"(\$\$.*?\$\$|\$[^$]+\$)", md, flags=re.DOTALL)
-    for i, chunk in enumerate(math_split):
-        # If this chunk is *not* a math token, escape its currency signs
-        if not (chunk.startswith("$$") and chunk.endswith("$$")) and not (
-            chunk.startswith("$") and chunk.endswith("$")
-        ):
-            math_split[i] = escape_currency(chunk)
-    md = "".join(math_split)
+    # 1) First, protect display math blocks ($$...$$) - these are unambiguous
+    display_math_blocks = []
+
+    def store_display_math(match):
+        display_math_blocks.append(match.group(0))
+        return f"__DISPLAY_MATH_{len(display_math_blocks)-1}__"
+
+    md = re.sub(r"\$\$.*?\$\$", store_display_math, md, flags=re.DOTALL)
+
+    # 2) Then protect inline math blocks that clearly contain math (have letters, backslashes, or math symbols)
+    inline_math_blocks = []
+
+    def store_inline_math(match):
+        inline_math_blocks.append(match.group(0))
+        return f"__INLINE_MATH_{len(inline_math_blocks)-1}__"
+
+    # More restrictive pattern: require backslash (LaTeX command) or math operators/symbols
+    md = re.sub(r"\$[^$]*(?:\\[a-zA-Z]+|[^$\w\s.,()]+)[^$]*\$", store_inline_math, md)
+
+    # 3) Now escape currency in the remaining text
+    md = escape_currency(md)
+
+    # 4) Restore the math blocks
+    for i, block in enumerate(display_math_blocks):
+        md = md.replace(f"__DISPLAY_MATH_{i}__", block)
+
+    for i, block in enumerate(inline_math_blocks):
+        md = md.replace(f"__INLINE_MATH_{i}__", block)
 
     # 2) Normalize display‐math blocks
     def replace_formula(match):
