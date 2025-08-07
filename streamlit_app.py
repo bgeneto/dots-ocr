@@ -1027,9 +1027,9 @@ def display_processing_results(config):
                     with open(md_file_path, "rb") as f:
                         file_content = f.read()
 
-                    download_label = "📄 Download Markdown"
+                    download_label = "⬇️ Download Markdown"
                     if not include_hf:
-                        download_label += " (No Headers/Footers)"
+                        download_label += " (no headers/footers)"
 
                     st.download_button(
                         label=download_label,
@@ -1042,9 +1042,9 @@ def display_processing_results(config):
                     st.error(f"Error creating download: {e}")
 
         # Show combined markdown content
-        if results["markdown_content"]:
-            with st.expander("📝 Full Markdown Content", expanded=False):
-                st.markdown(results["markdown_content"])
+        # if results["markdown_content"]:
+        #    with st.expander("📝 Full Markdown Content", expanded=False):
+        #        st.markdown(results["markdown_content"])
 
         # Add pagination controls for individual page results
         total_pages = len(results["pdf_results"])
@@ -1063,7 +1063,7 @@ def display_processing_results(config):
         col1, col2, col3 = st.columns([1, 2, 1])
         with col1:
             if st.button(
-                "⬅️ Previous Page", key="prev_results", disabled=current_page == 0
+                "⬅️ Previous Page", key="prev_results_page", disabled=current_page == 0
             ):
                 st.session_state.results_page = max(0, current_page - 1)
                 st.rerun()
@@ -1071,7 +1071,7 @@ def display_processing_results(config):
         with col3:
             if st.button(
                 "Next Page ➡️",
-                key="next_results",
+                key="next_results_page",
                 disabled=current_page == total_pages - 1,
             ):
                 st.session_state.results_page = min(total_pages - 1, current_page + 1)
@@ -1084,12 +1084,12 @@ def display_processing_results(config):
             col1, col2 = st.columns(2)
             with col1:
                 if current_result.get("md_content"):
-                    st.markdown("##### Current Page Markdown")
+                    st.markdown("##### Current Page Preview (md)")
                     st.markdown(current_result["md_content"])
 
             with col2:
                 if current_result.get("cells_data"):
-                    st.markdown("##### Current Page JSON")
+                    st.markdown("##### Current Page Preview (json)")
                     st.json(current_result["cells_data"])
 
     else:  # Image results

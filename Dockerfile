@@ -37,6 +37,8 @@ EXPOSE 8501
 # Streamlit config
 ENV STREAMLIT_SERVER_PORT=8501
 ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
+ENV STREAMLIT_SERVER_FILE_WATCHER_TYPE=poll
+ENV STREAMLIT_SERVER_RUNON_SAVE=true
 
 # Healthcheck (for streamlit app, ensure curl is available)
 HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health || exit 1
