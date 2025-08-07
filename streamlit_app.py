@@ -498,9 +498,8 @@ def create_config_sidebar():
     st.sidebar.header("Configuration Parameters")
 
     config = {}
-    config["prompt_key"] = st.sidebar.selectbox(
-        "Prompt Mode", list(dict_promptmode_to_prompt.keys(), key=2)
-    )
+    prompt_keys = list(dict_promptmode_to_prompt.keys())
+    config["prompt_key"] = st.sidebar.selectbox("Prompt Mode", prompt_keys, index=2)
 
     # Output configuration
     st.sidebar.subheader("Output Configuration")
