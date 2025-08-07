@@ -781,6 +781,60 @@ def create_combined_markdown_file(
     return None
 
 
+def create_combined_json_file(
+    pdf_results,
+    session_id,
+    temp_dir,
+    include_page_numbers=True,
+):
+    """Create a combined JSON file from all PDF pages
+
+    Args:
+        pdf_results: List of page results from PDF processing
+        session_id: Session ID for filename
+        temp_dir: Temporary directory to save the file
+        include_page_numbers: If True, include page information in the JSON structure
+
+    Returns:
+        str: Path to the created JSON file, or None if no data available
+    """
+    if not pdf_results:
+        return None
+
+    combined_json_data = {
+        "document_info": {
+            "session_id": session_id,
+            "total_pages": len(pdf_results),
+            "created_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
+        },
+        "pages": [],
+    }
+
+    for i, result in enumerate(pdf_results):
+        page_data = {"page_number": i + 1, "cells": result.get("cells_data", [])}
+
+        # Only add page info if requested
+        if include_page_numbers:
+            combined_json_data["pages"].append(page_data)
+        else:
+            # If not including page numbers, just extend the cells list
+            if i == 0:
+                combined_json_data["cells"] = []
+            combined_json_data["cells"].extend(result.get("cells_data", []))
+
+    # Remove pages structure if not using page numbers
+    if not include_page_numbers:
+        combined_json_data.pop("pages", None)
+
+    if combined_json_data.get("pages") or combined_json_data.get("cells"):
+        filename = f"document_{session_id}.json"
+        json_path = os.path.join(temp_dir, filename)
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(combined_json_data, f, indent=2, ensure_ascii=False)
+        return json_path
+    return None
+
+
 def process_file_with_high_level_api(
     file_path: str,
     file_ext: str,
@@ -1155,42 +1209,74 @@ def display_processing_results(config):
 
         st.success(info_text)
 
-        # Download button for combined markdown
+        # Download buttons for combined files
         if results["temp_dir"] and results["session_id"]:
             include_hf = config["include_headers_footers"]
             include_page_numbers = config["include_page_numbers"]
-            md_file_path = create_combined_markdown_file(
-                results["pdf_results"],
-                results["session_id"],
-                results["temp_dir"],
-                include_headers_footers=include_hf,
-                include_page_numbers=include_page_numbers,
-            )
-            if md_file_path:
-                # Generate appropriate filename based on user preference
-                version_suffix = "" if include_hf else "_nohf"
-                filename = f"document_{results['session_id']}{version_suffix}.md"
 
-                # Read file content first to avoid file handle issues
-                try:
-                    with open(md_file_path, "rb") as f:
-                        file_content = f.read()
+            # Create download columns for better layout
+            download_col1, download_col2 = st.columns(2)
 
-                    download_label = "💾 Download Markdown"
-                    if not include_hf:
-                        download_label += " (no headers/footers)"
+            with download_col1:
+                # Markdown download button
+                md_file_path = create_combined_markdown_file(
+                    results["pdf_results"],
+                    results["session_id"],
+                    results["temp_dir"],
+                    include_headers_footers=include_hf,
+                    include_page_numbers=include_page_numbers,
+                )
+                if md_file_path:
+                    # Generate appropriate filename based on user preference
+                    version_suffix = "" if include_hf else "_nohf"
+                    md_filename = f"document_{results['session_id']}{version_suffix}.md"
 
-                    # Make the key unique by including session_id and config options
-                    download_key = f"download_combined_md_{results['session_id']}_{include_hf}_{include_page_numbers}"
-                    st.download_button(
-                        label=download_label,
-                        data=file_content,
-                        file_name=filename,
-                        mime="text/markdown",
-                        key=download_key,
-                    )
-                except Exception as e:
-                    st.error(f"Error creating download: {e}")
+                    # Read file content first to avoid file handle issues
+                    try:
+                        with open(md_file_path, "rb") as f:
+                            md_file_content = f.read()
+
+                        download_label = "💾 Download Markdown"
+                        if not include_hf:
+                            download_label += " (no headers/footers)"
+
+                        # Make the key unique by including session_id and config options
+                        download_key = f"download_combined_md_{results['session_id']}_{include_hf}_{include_page_numbers}"
+                        st.download_button(
+                            label=download_label,
+                            data=md_file_content,
+                            file_name=md_filename,
+                            mime="text/markdown",
+                            key=download_key,
+                        )
+                    except Exception as e:
+                        st.error(f"Error creating markdown download: {e}")
+
+            with download_col2:
+                # JSON download button
+                json_file_path = create_combined_json_file(
+                    results["pdf_results"],
+                    results["session_id"],
+                    results["temp_dir"],
+                    include_page_numbers=include_page_numbers,
+                )
+                if json_file_path and results["cells_data"]:
+                    json_filename = f"document_{results['session_id']}.json"
+
+                    try:
+                        with open(json_file_path, "rb") as f:
+                            json_file_content = f.read()
+
+                        json_download_key = f"download_combined_json_{results['session_id']}_{include_page_numbers}"
+                        st.download_button(
+                            label="📄 Download JSON Layout",
+                            data=json_file_content,
+                            file_name=json_filename,
+                            mime="application/json",
+                            key=json_download_key,
+                        )
+                    except Exception as e:
+                        st.error(f"Error creating JSON download: {e}")
 
         # Show combined markdown content
         # if results["markdown_content"]:
@@ -1313,15 +1399,46 @@ def display_processing_results(config):
                 with st.expander("📋 JSON Layout Data", expanded=False):
                     st.json(results["cells_data"])
 
-            # Download button for markdown
-            if results["markdown_content"]:
-                st.download_button(
-                    label="💾 Download Markdown",
-                    data=results["markdown_content"],
-                    file_name=f"layout_result_{results['session_id']}.md",
-                    mime="text/markdown",
-                    key="download_image_md",
-                )
+            # Download buttons for results
+            download_col1, download_col2 = st.columns(2)
+
+            with download_col1:
+                # Download button for markdown
+                if results["markdown_content"]:
+                    st.download_button(
+                        label="💾 Download Markdown",
+                        data=results["markdown_content"],
+                        file_name=f"layout_result_{results['session_id']}.md",
+                        mime="text/markdown",
+                        key="download_image_md",
+                    )
+
+            with download_col2:
+                # Download button for JSON
+                if results["cells_data"]:
+                    json_data = {
+                        "document_info": {
+                            "session_id": results["session_id"],
+                            "image_dimensions": {
+                                "width": results["original_image"].width,
+                                "height": results["original_image"].height,
+                            },
+                            "total_elements": len(results["cells_data"]),
+                            "created_at": time.strftime(
+                                "%Y-%m-%d %H:%M:%S", time.localtime()
+                            ),
+                        },
+                        "cells": results["cells_data"],
+                    }
+
+                    json_content = json.dumps(json_data, indent=2, ensure_ascii=False)
+                    st.download_button(
+                        label="📄 Download JSON Layout",
+                        data=json_content,
+                        file_name=f"layout_result_{results['session_id']}.json",
+                        mime="application/json",
+                        key="download_image_json",
+                    )
 
 
 def process_and_display_results_legacy(output: dict, image: Image.Image, config: dict):
