@@ -39,7 +39,26 @@ class DotsOCRParser:
         max_pixels=None,
         use_hf=False,
         batch_size=None,  # New parameter for batch processing
+        use_batch_processing=True,  # Enable/disable batch processing
     ):
+        self.dpi = dpi
+
+        # default args for vllm server
+        self.ip = ip
+        self.port = port
+        self.model_name = model_name
+        # default args for inference
+        self.temperature = temperature
+        self.top_p = top_p
+        self.max_completion_tokens = max_completion_tokens
+        self.num_thread = num_thread
+        self.output_dir = output_dir
+        self.min_pixels = min_pixels
+        self.max_pixels = max_pixels
+        self.batch_size = batch_size  # If None, process all pages in one batch
+        self.use_batch_processing = use_batch_processing  # Control batch vs threading
+
+        self.use_hf = use_hf
         self.dpi = dpi
 
         # default args for vllm server
@@ -593,11 +612,35 @@ class DotsOCRParser:
     def parse_pdf(self, input_path, filename, prompt_mode, save_dir):
         """
         Optimized PDF parsing with batch processing and reduced preprocessing overhead
+        Falls back to threading if batch processing is disabled or fails
         """
         print(f"loading pdf: {input_path}")
         images_origin = load_images_from_pdf(input_path, dpi=self.dpi)
         total_pages = len(images_origin)
 
+        # Decide which processing method to use
+        use_batch = (
+            self.use_batch_processing
+            and not self.use_hf  # Batch processing primarily for vLLM
+            and hasattr(self, "_parse_batch_images")  # Ensure method exists
+        )
+
+        if use_batch:
+            print(f"Using batch processing for {total_pages} pages...")
+            return self._parse_pdf_with_batch(
+                input_path, filename, prompt_mode, save_dir, images_origin
+            )
+        else:
+            print(f"Using threading approach for {total_pages} pages...")
+            return self._parse_pdf_with_threading(
+                input_path, filename, prompt_mode, save_dir, images_origin
+            )
+
+    def _parse_pdf_with_batch(
+        self, input_path, filename, prompt_mode, save_dir, images_origin
+    ):
+        """Batch processing implementation"""
+        total_pages = len(images_origin)
         print(f"Preprocessing {total_pages} pages...")
 
         # Preprocess all images once to avoid repeated work
@@ -637,21 +680,61 @@ class DotsOCRParser:
                 }
             )
 
-        if self.use_hf:
-            print("Using HuggingFace model - processing sequentially...")
-            # For HF models, process sequentially but still use the optimized pipeline
-            results = self._parse_batch_images(images_data, prompt_mode)
-        else:
-            print(f"Using vLLM batch processing for {total_pages} pages...")
-            # Use batch processing for vLLM
+        try:
+            # Use batch processing
             results = self._parse_batch_images(images_data, prompt_mode)
 
-        # Sort results by page number and add file path
+            # Sort results by page number and add file path
+            results.sort(key=lambda x: x["page_no"])
+            for result in results:
+                result["file_path"] = input_path
+
+            print(f"Completed batch processing {len(results)} pages")
+            return results
+
+        except Exception as e:
+            print(f"Batch processing failed: {e}")
+            print("Falling back to threading approach...")
+            return self._parse_pdf_with_threading(
+                input_path, filename, prompt_mode, save_dir, images_origin
+            )
+
+    def _parse_pdf_with_threading(
+        self, input_path, filename, prompt_mode, save_dir, images_origin
+    ):
+        """Original threading implementation (fallback)"""
+        total_pages = len(images_origin)
+        tasks = [
+            {
+                "origin_image": image,
+                "prompt_mode": prompt_mode,
+                "save_dir": save_dir,
+                "save_name": filename,
+                "source": "pdf",
+                "page_idx": i,
+            }
+            for i, image in enumerate(images_origin)
+        ]
+
+        def _execute_task(task_args):
+            return self._parse_single_image(**task_args)
+
+        if self.use_hf:
+            num_thread = 1
+        else:
+            num_thread = min(total_pages, self.num_thread)
+        print(f"Parsing PDF with {total_pages} pages using {num_thread} threads...")
+
+        results = []
+        with ThreadPool(num_thread) as pool:
+            with tqdm(total=total_pages, desc="Processing PDF pages") as pbar:
+                for result in pool.imap_unordered(_execute_task, tasks):
+                    results.append(result)
+                    pbar.update(1)
+
         results.sort(key=lambda x: x["page_no"])
         for result in results:
             result["file_path"] = input_path
-
-        print(f"Completed processing {len(results)} pages")
         return results
 
     def parse_file(

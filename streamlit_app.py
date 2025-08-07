@@ -50,6 +50,8 @@ def get_parser(config: dict) -> DotsOCRParser:
                 min_pixels=config["min_pixels"],
                 max_pixels=config["max_pixels"],
                 num_thread=config.get("num_threads", 16),
+                use_batch_processing=config.get("use_batch_processing", True),
+                batch_size=config.get("batch_size", None),
             )
         except Exception as e:
             st.error(f"Failed to initialize DotsOCRParser: {e}")
@@ -60,6 +62,9 @@ def get_parser(config: dict) -> DotsOCRParser:
     parser.port = config["port"]
     parser.min_pixels = config["min_pixels"]
     parser.max_pixels = config["max_pixels"]
+    parser.num_thread = config.get("num_threads", 16)
+    parser.use_batch_processing = config.get("use_batch_processing", True)
+    parser.batch_size = config.get("batch_size", None)
     return parser
 
 
@@ -120,6 +125,8 @@ def initialize_session_state():
                 min_pixels=DEFAULT_CONFIG["min_pixels"],
                 max_pixels=DEFAULT_CONFIG["max_pixels"],
                 num_thread=16,  # Default thread count
+                use_batch_processing=True,  # Enable batch processing by default
+                batch_size=None,  # Process all pages in one batch
             )
         except Exception as e:
             st.error(f"Failed to initialize DotsOCRParser: {str(e)}")
@@ -621,6 +628,24 @@ def create_config_sidebar() -> Dict[str, any]:
             help="Display a visual progress bar during PDF processing with a fixed pace estimate (12 pages/minute).",
         )
 
+        st.subheader("Batch Processing Options")
+        config["use_batch_processing"] = st.checkbox(
+            "Enable Batch Processing (vLLM)",
+            value=True,
+            help="Use async batch processing instead of threading for vLLM inference. This can significantly improve performance by reducing HTTP overhead and better utilizing GPU resources.",
+        )
+
+        config["batch_size"] = st.number_input(
+            "Batch Size (0 = All pages at once)",
+            min_value=0,
+            max_value=100,
+            value=0,
+            step=1,
+            help="Number of pages to process in each batch. Set to 0 to process all pages in one batch. Smaller batches may be more memory-efficient for large PDFs.",
+        )
+        if config["batch_size"] == 0:
+            config["batch_size"] = None
+
     return config
 
 
@@ -868,16 +893,39 @@ def process_file_with_high_level_api(
                     f"📊 Optimizing threads: Using {optimal_threads} threads for {total_pages} pages (instead of {config['num_threads']})"
                 )
 
-        # Update parser with optimal thread count
+        # Update parser with optimal thread count and batch settings
         parser.num_thread = optimal_threads
+        parser.use_batch_processing = config.get("use_batch_processing", True)
+        parser.batch_size = config.get("batch_size", None)
 
-        # Use the high-level parse_pdf method directly for parallel processing
+        # Show processing method info
+        if config.get("use_batch_processing", True) and not parser.use_hf:
+            batch_info = f"🚀 **Using Batch Processing** for {total_pages} pages"
+            if config.get("batch_size") and config["batch_size"] > 0:
+                batch_info += f" (batch size: {config['batch_size']})"
+            st.info(batch_info)
+        else:
+            thread_reason = (
+                "HuggingFace model" if parser.use_hf else "batch processing disabled"
+            )
+            st.info(
+                f"🔄 **Using Threading** for {total_pages} pages with {optimal_threads} threads ({thread_reason})"
+            )
+
+        # Use the high-level parse_pdf method directly for processing
         temp_dir, session_id = create_temp_session_dir()
         filename = f"demo_{session_id}"
 
+        # Determine processing method for status message
+        processing_method = (
+            "batch processing"
+            if config.get("use_batch_processing", True) and not parser.use_hf
+            else f"{optimal_threads} threads"
+        )
+
         if status_placeholder:
             status_placeholder.info(
-                f"⏳ Please wait, processing {total_pages} PDF pages in parallel using {optimal_threads} threads..."
+                f"⏳ Please wait, processing {total_pages} PDF pages using {processing_method}..."
             )
 
         try:
@@ -1001,6 +1049,9 @@ def process_file_with_high_level_api(
     else:
         # Image processing (single thread is sufficient)
         parser.num_thread = 1
+
+        # Show processing method info for single image
+        st.info("🖼️ **Using Single Image Processing** (optimized batch pipeline)")
 
         if status_placeholder:
             status_placeholder.info(
@@ -1198,11 +1249,18 @@ def display_processing_results(config):
                 seconds = processing_time % 60
                 time_info = f"- Processing Time: {minutes}m {seconds:.2f}s"
 
+        # Determine processing method used
+        processing_method = (
+            "Batch Processing"
+            if config.get("use_batch_processing", True)
+            else f"Threading ({results.get('threads_used', config.get('num_threads', 16))} threads)"
+        )
+
         info_text = f"""
 **PDF Information:**
 - Total Pages: {len(results['pdf_results'])}
 - Total Detected Elements: {total_elements}
-- Processing Threads: {results.get('threads_used', config.get('num_threads', 16))}
+- Processing Method: {processing_method}
 - Session ID: {results['session_id']}
 {time_info}
         """
