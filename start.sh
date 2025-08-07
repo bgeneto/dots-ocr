@@ -21,6 +21,6 @@ vllm serve /workspace/weights/DotsOCR \
 #done
 
 echo "vLLM ready! Starting Streamlit..."
-exec streamlit run streamlit_app.py --browser.gatherUsageStats=false
+exec streamlit run streamlit_app.py --server.runOnSave=true --browser.gatherUsageStats=false
 #exec python3 gradio_app.py
 
