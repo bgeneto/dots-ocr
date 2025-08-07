@@ -25,6 +25,7 @@ from dots_ocr.utils.image_utils import get_input_dimensions, get_image_by_fitz_d
 from dots_ocr.utils.consts import MIN_PIXELS, MAX_PIXELS
 from dots_ocr.utils.demo_utils.display import read_image
 from dots_ocr.utils.doc_utils import load_images_from_pdf
+from dots_ocr.utils.format_transformer import fix_streamlit_formulas
 
 # Add DotsOCRParser import
 from dots_ocr.parser import DotsOCRParser
@@ -951,7 +952,7 @@ def process_and_display_results_legacy(output: dict, image: Image.Image, config:
         with col2:
             # st.markdown("##### Markdown格式")
             md_code = layoutjson2md(image, cells, text_key="text")
-            # md_code = fix_streamlit_formula(md_code)
+            md_code = fix_streamlit_formulas(md_code)
             st.markdown("##### Markdown Format")
             st.markdown(md_code, unsafe_allow_html=True)
 
@@ -1114,7 +1115,7 @@ def display_processing_results(config):
             with col1:
                 if current_result.get("md_content"):
                     st.markdown("##### Current Page Preview (md)")
-                    st.markdown(current_result["md_content"])
+                    st.markdown(current_result["md_content"], unsafe_allow_html=True)
 
             with col2:
                 if current_result.get("cells_data"):
@@ -1206,18 +1207,10 @@ def process_and_display_results_legacy(output: dict, image: Image.Image, config:
         )
         st.markdown("---")
         st.write(f"Input Dimensions: {input_width} x {input_height}")
-        # st.write(f'Prompt: {prompt}')
-        # st.markdown(f'模型原始输出: <span style="color:blue">{result}</span>', unsafe_allow_html=True)
-        # st.write('模型原始输出：')
-        # st.write(response)
-        # st.write('后处理结果:', str(cells))
         st.text_area("Original Model Output", response, height=200)
         st.text_area("Post-processed Result", str(cells), height=200)
-        # 显示结果
-        # st.title("Layout推理结果")
 
         with col1:
-            # st.markdown("##### 可视化结果")
             new_image = draw_layout_on_image(
                 image,
                 cells,
@@ -1233,9 +1226,8 @@ def process_and_display_results_legacy(output: dict, image: Image.Image, config:
             st.image(new_image, width=display_width)
 
         with col2:
-            # st.markdown("##### Markdown格式")
             md_code = layoutjson2md(image, cells, text_key="text")
-            # md_code = fix_streamlit_formula(md_code)
+            md_code = fix_streamlit_formulas(md_code)
             st.markdown("##### Markdown Format")
             st.markdown(md_code, unsafe_allow_html=True)
 
