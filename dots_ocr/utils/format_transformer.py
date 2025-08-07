@@ -200,8 +200,8 @@ def fix_streamlit_formulas(md: str, use_mathdollar: bool = False) -> str:
     # Helper to escape currency‐style $ (e.g. $5.00) in plain text
     def escape_currency(txt: str) -> str:
         if use_mathdollar:
-            # Use \mathdollar{} for KaTeX compatibility in display
-            return re.sub(r"(?<!\\)\$(?=\d)", r"\\mathdollar{}", txt)
+            # Use $\mathdollar$ for KaTeX compatibility in display (math mode required)
+            return re.sub(r"(?<!\\)\$(?=\d)", r"$\\mathdollar$", txt)
         else:
             # Use \$ for file downloads
             return re.sub(r"(?<!\\)\$(?=\d)", r"\\$", txt)
