@@ -16,7 +16,7 @@ from dots_ocr.utils.layout_utils import (
     draw_layout_on_image,
     pre_process_bboxes,
 )
-from dots_ocr.utils.format_transformer import layoutjson2md, fix_streamlit_formulas
+from dots_ocr.utils.format_transformer import layoutjson2md
 
 
 class DotsOCRParser:
@@ -257,8 +257,7 @@ class DotsOCRParser:
 
                 md_file_path = os.path.join(save_dir, f"{save_name}.md")
                 with open(md_file_path, "w", encoding="utf-8") as md_file:
-                    cells_fixed = fix_streamlit_formulas(cells)
-                    md_file.write(cells_fixed)
+                    md_file.write(cells)
                 result.update({"md_content_path": md_file_path})
                 result.update({"filtered": True})
             else:
@@ -284,11 +283,9 @@ class DotsOCRParser:
                     prompt_mode != "prompt_layout_only_en"
                 ):  # no text md when detection only
                     md_content = layoutjson2md(origin_image, cells, text_key="text")
-                    md_content = fix_streamlit_formulas(md_content)
                     md_content_no_hf = layoutjson2md(
                         origin_image, cells, text_key="text", no_page_hf=True
                     )  # used for clean output or metric of omnidocbench、olmbench
-                    md_content_no_hf = fix_streamlit_formulas(md_content_no_hf)
                     md_file_path = os.path.join(save_dir, f"{save_name}.md")
                     with open(md_file_path, "w", encoding="utf-8") as md_file:
                         md_file.write(md_content)
@@ -311,7 +308,6 @@ class DotsOCRParser:
             )
 
             md_content = response
-            md_content = fix_streamlit_formulas(md_content)
             md_file_path = os.path.join(save_dir, f"{save_name}.md")
             with open(md_file_path, "w", encoding="utf-8") as md_file:
                 md_file.write(md_content)
@@ -507,8 +503,7 @@ class DotsOCRParser:
 
                 md_file_path = os.path.join(save_dir, f"{save_name}.md")
                 with open(md_file_path, "w", encoding="utf-8") as md_file:
-                    cells_fixed = fix_streamlit_formulas(cells)
-                    md_file.write(cells_fixed)
+                    md_file.write(cells)
                 result.update({"md_content_path": md_file_path, "filtered": True})
             else:
                 try:
@@ -559,7 +554,6 @@ class DotsOCRParser:
             )
 
             md_content = response
-            md_content = fix_streamlit_formulas(md_content)
             md_file_path = os.path.join(save_dir, f"{save_name}.md")
             with open(md_file_path, "w", encoding="utf-8") as md_file:
                 md_file.write(md_content)

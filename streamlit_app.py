@@ -798,6 +798,7 @@ def create_combined_markdown_file(
 
     if combined_md_lines:
         combined_md = "\n".join(combined_md_lines)
+        combined_md = fix_streamlit_formulas(combined_md)  # Apply formula fixes
         filename = f"document_{session_id}{version_suffix}.md"
         md_path = os.path.join(temp_dir, filename)
         with open(md_path, "w", encoding="utf-8") as f:
@@ -1379,19 +1380,24 @@ def display_processing_results(config):
             has_json_content = bool(current_result.get("cells_data"))
             text = f"##### Page {current_page + 1} preview ↴"
 
+            # Apply formula fixes once for all uses
+            fixed_page_md = None
+            if has_md_content:
+                fixed_page_md = fix_streamlit_formulas(current_result["md_content"])
+
             if has_md_content and has_json_content:
                 # Show both in two columns
                 col1, col2 = st.columns(2)
                 with col1:
                     st.markdown(text)
-                    st.markdown(current_result["md_content"], unsafe_allow_html=True)
+                    st.markdown(fixed_page_md, unsafe_allow_html=True)
                 with col2:
                     st.markdown(text)
                     st.json(current_result["cells_data"])
             elif has_md_content:
                 # Show only markdown in full width
                 st.markdown(text)
-                st.markdown(current_result["md_content"], unsafe_allow_html=True)
+                st.markdown(fixed_page_md, unsafe_allow_html=True)
             elif has_json_content:
                 # Show only JSON in full width
                 st.markdown(text)
@@ -1429,6 +1435,13 @@ def display_processing_results(config):
             has_layout_image = bool(results["layout_result"])
             has_markdown = bool(results["markdown_content"])
 
+            # Apply formula fixes once for all uses
+            fixed_markdown_content = None
+            if has_markdown:
+                fixed_markdown_content = fix_streamlit_formulas(
+                    results["markdown_content"]
+                )
+
             if has_layout_image and has_markdown:
                 # Show both in two columns
                 col1, col2 = st.columns(2)
@@ -1441,7 +1454,7 @@ def display_processing_results(config):
                     st.image(results["layout_result"], width=display_width)
                 with col2:
                     st.markdown("##### Markdown Content")
-                    st.markdown(results["markdown_content"], unsafe_allow_html=True)
+                    st.markdown(fixed_markdown_content, unsafe_allow_html=True)
             elif has_layout_image:
                 # Show only layout image in full width
                 st.markdown("##### Layout Detection Result")
@@ -1452,7 +1465,7 @@ def display_processing_results(config):
             elif has_markdown:
                 # Show only markdown in full width
                 st.markdown("##### Markdown Content")
-                st.markdown(results["markdown_content"], unsafe_allow_html=True)
+                st.markdown(fixed_markdown_content, unsafe_allow_html=True)
 
             # Show JSON data
             if results["cells_data"]:
@@ -1467,7 +1480,7 @@ def display_processing_results(config):
                 if results["markdown_content"]:
                     st.download_button(
                         label="💾 Download Markdown",
-                        data=results["markdown_content"],
+                        data=fixed_markdown_content,
                         file_name=f"layout_result_{results['session_id']}.md",
                         mime="text/markdown",
                         key="download_image_md",
