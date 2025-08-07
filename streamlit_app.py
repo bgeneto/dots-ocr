@@ -780,6 +780,13 @@ def process_file_with_high_level_api(
             )
             st.stop()  # Stop execution if parser can't be initialized
 
+    # Ensure parser is initialized before proceeding
+    if "dots_parser" not in st.session_state:
+        st.error(
+            "Critical error: DotsOCRParser is not initialized. Please check server connection and try again."
+        )
+        st.stop()
+
     # Update parser configuration
     st.session_state.dots_parser.ip = config["ip"]
     st.session_state.dots_parser.port = config["port"]
