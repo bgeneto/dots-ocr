@@ -589,9 +589,9 @@ def create_config_sidebar() -> Dict[str, any]:
     )
 
     config["fix_formulas"] = st.sidebar.checkbox(
-        "Fix Streamlit Formula Display",
+        "Fix Formula Display",
         value=True,
-        help="When checked (default), mathematical formulas will be processed to display correctly in Streamlit. Uncheck if you want to preserve the original formula formatting.",
+        help="When checked (default), mathematical formulas will be processed/escaped to display correctly. Uncheck if you want to preserve the original formula formatting.",
     )
 
     config["ip"] = DEFAULT_CONFIG[
