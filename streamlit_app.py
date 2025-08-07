@@ -632,11 +632,11 @@ def create_config_sidebar() -> Dict[str, any]:
         config["use_batch_processing"] = st.checkbox(
             "Enable Batch Processing (vLLM)",
             value=True,
-            help="Use async batch processing instead of threading for vLLM inference. This can significantly improve performance by reducing HTTP overhead and better utilizing GPU resources.",
+            help="Use async batch processing instead of threading for vLLM inference. This can improve performance by reducing HTTP overhead and better utilizing GPU resources.",
         )
 
         config["batch_size"] = st.number_input(
-            "Batch Size (0 = All pages at once)",
+            "Pages per Batch (0 = all pages at once)",
             min_value=0,
             max_value=100,
             value=0,
