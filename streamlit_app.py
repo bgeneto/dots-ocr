@@ -11,7 +11,6 @@ import io
 import tempfile
 import shutil
 import uuid
-import zipfile
 import base64
 import time
 import threading
@@ -22,7 +21,7 @@ import requests
 from dots_ocr.utils import dict_promptmode_to_prompt
 from dots_ocr.utils.format_transformer import layoutjson2md
 from dots_ocr.utils.layout_utils import draw_layout_on_image, post_process_cells
-from dots_ocr.utils.image_utils import get_input_dimensions, get_image_by_fitz_doc
+from dots_ocr.utils.image_utils import get_input_dimensions
 from dots_ocr.utils.consts import MIN_PIXELS, MAX_PIXELS
 from dots_ocr.utils.demo_utils.display import read_image
 from dots_ocr.utils.doc_utils import load_images_from_pdf
@@ -41,72 +40,113 @@ DEFAULT_CONFIG = {
     "test_images_dir": "./test_images_dir",
 }
 
+# Supported file extensions
+SUPPORTED_IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".gif"]
+SUPPORTED_EXTENSIONS = [".pdf"] + SUPPORTED_IMAGE_EXTENSIONS
+
+# UI Constants
+DEFAULT_IMAGE_WIDTH = 800
+COMPACT_IMAGE_WIDTH = 600
+
+# Default session state values
+DEFAULT_PROCESSING_RESULTS = {
+    "original_image": None,
+    "processed_image": None,
+    "layout_result": None,
+    "markdown_content": None,
+    "cells_data": None,
+    "temp_dir": None,
+    "session_id": None,
+    "result_paths": None,
+    "pdf_results": None,  # Store multi-page PDF results
+    "processing_time": None,  # Store processing duration in seconds
+    "start_time": None,  # Store processing start timestamp
+    "end_time": None,  # Store processing end timestamp
+    "threads_used": None,  # Store actual number of threads used for processing
+}
+
+DEFAULT_PDF_CACHE = {
+    "images": [],
+    "current_page": 0,
+    "total_pages": 0,
+    "file_type": None,  # 'image' or 'pdf'
+    "is_parsed": False,  # Whether it has been parsed
+    "results": [],  # Store parsing results for each page
+}
+
+
 # ==================== Global Variables ====================
-# Initialize session state for configuration
-if "current_config" not in st.session_state:
-    st.session_state.current_config = DEFAULT_CONFIG.copy()
+def initialize_session_state():
+    """Initialize all session state variables"""
+    # Initialize session state for DotsOCRParser
+    if "dots_parser" not in st.session_state:
+        st.session_state.dots_parser = DotsOCRParser(
+            ip=DEFAULT_CONFIG["ip"],
+            port=DEFAULT_CONFIG["port_vllm"],
+            dpi=200,
+            min_pixels=DEFAULT_CONFIG["min_pixels"],
+            max_pixels=DEFAULT_CONFIG["max_pixels"],
+            num_thread=16,  # Default thread count
+        )
 
-# Initialize session state for DotsOCRParser
-if "dots_parser" not in st.session_state:
-    st.session_state.dots_parser = DotsOCRParser(
-        ip=DEFAULT_CONFIG["ip"],
-        port=DEFAULT_CONFIG["port_vllm"],
-        dpi=200,
-        min_pixels=DEFAULT_CONFIG["min_pixels"],
-        max_pixels=DEFAULT_CONFIG["max_pixels"],
-        num_thread=16,  # Default thread count
-    )
+    # Initialize session state for processing results
+    if "processing_results" not in st.session_state:
+        st.session_state.processing_results = DEFAULT_PROCESSING_RESULTS.copy()
 
-# Initialize session state for processing results
-if "processing_results" not in st.session_state:
-    st.session_state.processing_results = {
-        "original_image": None,
-        "processed_image": None,
-        "layout_result": None,
-        "markdown_content": None,
-        "cells_data": None,
-        "temp_dir": None,
-        "session_id": None,
-        "result_paths": None,
-        "pdf_results": None,  # Store multi-page PDF results
-        "processing_time": None,  # Store processing duration in seconds
-        "start_time": None,  # Store processing start timestamp
-        "end_time": None,  # Store processing end timestamp
-        "threads_used": None,  # Store actual number of threads used for processing
-    }
+    # Initialize session state for PDF caching mechanism
+    if "pdf_cache" not in st.session_state:
+        st.session_state.pdf_cache = DEFAULT_PDF_CACHE.copy()
 
-# Initialize session state for PDF caching mechanism
-if "pdf_cache" not in st.session_state:
-    st.session_state.pdf_cache = {
-        "images": [],
-        "current_page": 0,
-        "total_pages": 0,
-        "file_type": None,  # 'image' or 'pdf'
-        "is_parsed": False,  # Whether it has been parsed
-        "results": [],  # Store parsing results for each page
-    }
+    # Initialize session state for preview pagination
+    if "preview_page" not in st.session_state:
+        st.session_state.preview_page = 0
 
-# Initialize session state for preview pagination
-if "preview_page" not in st.session_state:
-    st.session_state.preview_page = 0
+    # Initialize session state for current preview file tracking
+    if "current_preview_file" not in st.session_state:
+        st.session_state.current_preview_file = None
 
-# Initialize session state for current preview file tracking
-if "current_preview_file" not in st.session_state:
-    st.session_state.current_preview_file = None
+    # Initialize session state for processing flags
+    if "is_processing" not in st.session_state:
+        st.session_state.is_processing = False
 
-# Initialize session state for processing flags
-if "is_processing" not in st.session_state:
-    st.session_state.is_processing = False
+    # Initialize session state for tracking temporary files from URLs
+    if "temp_files_to_cleanup" not in st.session_state:
+        st.session_state.temp_files_to_cleanup = []
 
-# Initialize session state for tracking temporary files from URLs
-if "temp_files_to_cleanup" not in st.session_state:
-    st.session_state.temp_files_to_cleanup = []
+    # Initialize session state for results pagination
+    if "results_page" not in st.session_state:
+        st.session_state.results_page = 0
 
-# Initialize session state for results pagination
-if "results_page" not in st.session_state:
-    st.session_state.results_page = 0
+
+# Initialize session state
+initialize_session_state()
+
 
 # ==================== Utility Functions ====================
+def reset_session_data():
+    """Reset all session data and clean up temporary files"""
+    # Clean up temporary directories
+    if st.session_state.processing_results.get("temp_dir"):
+        temp_dir = st.session_state.processing_results["temp_dir"]
+        if os.path.exists(temp_dir):
+            try:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            except Exception as e:
+                st.warning(f"Failed to clean up temporary directory: {e}")
+
+    # Clean up temporary files from URL downloads
+    cleanup_old_temp_files()
+
+    # Clean up uploaded temporary files
+    cleanup_upload_temp_files()
+
+    # Reset all session state using default values
+    st.session_state.processing_results = DEFAULT_PROCESSING_RESULTS.copy()
+    st.session_state.pdf_cache = DEFAULT_PDF_CACHE.copy()
+    st.session_state.temp_files_to_cleanup = []
+    st.session_state.current_preview_file = None
+    st.session_state.preview_page = 0
+    st.session_state.results_page = 0
 
 
 def detect_file_type_from_url(url):
@@ -151,16 +191,7 @@ def detect_file_type_from_url(url):
             url_ext = os.path.splitext(url.split("?")[0])[
                 1
             ].lower()  # Remove query params
-            if url_ext in [
-                ".pdf",
-                ".jpg",
-                ".jpeg",
-                ".png",
-                ".webp",
-                ".bmp",
-                ".tiff",
-                ".gif",
-            ]:
+            if url_ext in SUPPORTED_EXTENSIONS:
                 detected_ext = url_ext
 
         # Download the file
@@ -192,17 +223,7 @@ def detect_file_type_from_url(url):
                 detected_ext = ".jpg"  # Default fallback
 
         # Validate that detected extension is supported
-        supported_exts = [
-            ".pdf",
-            ".jpg",
-            ".jpeg",
-            ".png",
-            ".webp",
-            ".bmp",
-            ".tiff",
-            ".gif",
-        ]
-        if detected_ext not in supported_exts:
+        if detected_ext not in SUPPORTED_EXTENSIONS:
             return None, None, f"Unsupported file type detected: {detected_ext}"
 
         # Save to temporary file with correct extension
@@ -241,7 +262,7 @@ def cleanup_upload_temp_files():
             pass
 
 
-def get_limited_image_width(image, max_width=800):
+def get_limited_image_width(image, max_width=DEFAULT_IMAGE_WIDTH):
     """
     Calculate appropriate display width for an image, limiting it for high-res screens
 
@@ -294,7 +315,7 @@ def load_file_for_preview(file_path):
             st.session_state.pdf_cache["file_type"] = "pdf"
         except Exception as e:
             return None, f"PDF loading failed: {str(e)}"
-    elif file_ext in [".jpg", ".jpeg", ".png"]:
+    elif file_ext in SUPPORTED_IMAGE_EXTENSIONS:
         # For image files, read directly as a single-page image
         try:
             pages = [read_image_v2(file_path)]
@@ -576,9 +597,10 @@ def get_file_input():
 
     if input_mode == "Upload File":
         # File uploader - now supports both images and PDFs
-        uploaded_file = st.file_uploader(
-            "Upload Image or PDF", type=["png", "jpg", "jpeg", "pdf"]
-        )
+        file_types = [
+            ext.lstrip(".") for ext in SUPPORTED_EXTENSIONS
+        ]  # Remove dots for streamlit
+        uploaded_file = st.file_uploader("Upload Image or PDF", type=file_types)
         if uploaded_file is not None:
             # Create a persistent temporary file with a consistent name based on file content
             file_ext = os.path.splitext(uploaded_file.name)[1].lower()
@@ -636,7 +658,7 @@ def get_file_input():
             test_files = [
                 os.path.join(test_dir, name)
                 for name in os.listdir(test_dir)
-                if name.lower().endswith((".png", ".jpg", ".jpeg", ".pdf"))
+                if name.lower().endswith(tuple(SUPPORTED_EXTENSIONS))
             ]
         file_url_test = st.selectbox("Select Test File", [""] + test_files)
         if file_url_test:
@@ -1037,7 +1059,9 @@ def display_pdf_preview(key_prefix=""):
     st.markdown(f"**Page {current_page + 1} of {total_pages}**")
 
     # Limit the width for high-resolution screens
-    display_width = get_limited_image_width(current_image, max_width=800)
+    display_width = get_limited_image_width(
+        current_image, max_width=DEFAULT_IMAGE_WIDTH
+    )
     st.image(current_image, caption=f"Page {current_page + 1}", width=display_width)
 
     # Add pagination controls
@@ -1238,7 +1262,7 @@ def display_processing_results(config):
                     st.markdown("##### Layout Detection Result")
                     # Limit the width for high-resolution screens
                     display_width = get_limited_image_width(
-                        results["layout_result"], max_width=600
+                        results["layout_result"], max_width=COMPACT_IMAGE_WIDTH
                     )
                     st.image(results["layout_result"], width=display_width)
                 with col2:
@@ -1248,7 +1272,7 @@ def display_processing_results(config):
                 # Show only layout image in full width
                 st.markdown("##### Layout Detection Result")
                 display_width = get_limited_image_width(
-                    results["layout_result"], max_width=800
+                    results["layout_result"], max_width=DEFAULT_IMAGE_WIDTH
                 )
                 st.image(results["layout_result"], width=display_width)
             elif has_markdown:
@@ -1313,7 +1337,9 @@ def process_and_display_results_legacy(output: dict, image: Image.Image, config:
             )
             st.markdown("##### Visualization Result")
             # Limit the width for high-resolution screens
-            display_width = get_limited_image_width(new_image, max_width=600)
+            display_width = get_limited_image_width(
+                new_image, max_width=COMPACT_IMAGE_WIDTH
+            )
             st.image(new_image, width=display_width)
 
         with col2:
@@ -1346,48 +1372,7 @@ def main():
 
     # Clear results button
     if st.button("🧹 Clear All Data", key="clear_all_data"):
-        # Clean up temporary directories
-        if st.session_state.processing_results.get("temp_dir"):
-            temp_dir = st.session_state.processing_results["temp_dir"]
-            if os.path.exists(temp_dir):
-                try:
-                    shutil.rmtree(temp_dir, ignore_errors=True)
-                except Exception as e:
-                    st.warning(f"Failed to clean up temporary directory: {e}")
-
-        # Clean up temporary files from URL downloads
-        cleanup_old_temp_files()
-
-        # Clean up uploaded temporary files
-        cleanup_upload_temp_files()
-
-        # Reset all session state
-        st.session_state.processing_results = {
-            "original_image": None,
-            "processed_image": None,
-            "layout_result": None,
-            "markdown_content": None,
-            "cells_data": None,
-            "temp_dir": None,
-            "session_id": None,
-            "result_paths": None,
-            "pdf_results": None,
-            "processing_time": None,
-            "start_time": None,
-            "end_time": None,
-            "threads_used": None,
-        }
-        st.session_state.pdf_cache = {
-            "images": [],
-            "current_page": 0,
-            "total_pages": 0,
-            "file_type": None,
-            "is_parsed": False,
-            "results": [],
-        }
-        st.session_state.temp_files_to_cleanup = []
-        st.session_state.current_preview_file = None
-        st.session_state.preview_page = 0
+        reset_session_data()
         st.rerun()
 
     # File preview with proper session state management
@@ -1421,7 +1406,9 @@ def main():
                     preview_col1, preview_col2 = st.columns([2, 1])
                     with preview_col1:
                         # Limit the width for high-resolution screens
-                        display_width = get_limited_image_width(image, max_width=800)
+                        display_width = get_limited_image_width(
+                            image, max_width=DEFAULT_IMAGE_WIDTH
+                        )
                         st.image(image, caption="Image Preview", width=display_width)
                     with preview_col2:
                         st.markdown("**Image Information:**")
@@ -1479,13 +1466,6 @@ def main():
 
         # Reset processing flag
         st.session_state.is_processing = False
-
-    # Display results if available
-    if (
-        st.session_state.processing_results["markdown_content"]
-        or st.session_state.processing_results["pdf_results"]
-    ):
-        display_processing_results(config)
 
     # Display results if available
     if (
