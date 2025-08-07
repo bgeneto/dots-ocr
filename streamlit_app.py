@@ -588,6 +588,12 @@ def create_config_sidebar() -> Dict[str, any]:
         help="When checked (default), page numbers will be included as headers in the final markdown file.",
     )
 
+    config["fix_formulas"] = st.sidebar.checkbox(
+        "Fix Streamlit Formula Display",
+        value=True,
+        help="When checked (default), mathematical formulas will be processed to display correctly in Streamlit. Uncheck if you want to preserve the original formula formatting.",
+    )
+
     config["ip"] = DEFAULT_CONFIG[
         "ip"
     ]  # st.sidebar.text_input("Server IP", DEFAULT_CONFIG["ip"])
@@ -745,6 +751,7 @@ def create_combined_markdown_file(
     temp_dir,
     include_headers_footers=False,
     include_page_numbers=True,
+    fix_formulas=True,
 ):
     """Create a combined markdown file from all PDF pages
 
@@ -753,6 +760,8 @@ def create_combined_markdown_file(
         session_id: Session ID for filename
         temp_dir: Temporary directory to save the file
         include_headers_footers: If True, use regular .md files; if False, use _nohf.md files
+        include_page_numbers: If True, include page numbers as headers in the final markdown file
+        fix_formulas: If True, apply fix_streamlit_formulas to improve formula display in Streamlit
 
     The DotsOCRParser generates two versions of markdown files:
     - Regular .md files: Include headers and footers (complete document structure)
@@ -791,8 +800,9 @@ def create_combined_markdown_file(
                 md_content = result["md_content"]
 
         if md_content:
-            # Apply fix to each page's content before adding to combined
-            md_content = fix_streamlit_formulas(md_content)
+            # Apply fix to each page's content before adding to combined (if enabled)
+            if fix_formulas:
+                md_content = fix_streamlit_formulas(md_content)
 
             if include_page_numbers:
                 combined_md_lines.append(f"---\nPAGE: {i+1}\n---\n")
@@ -801,7 +811,7 @@ def create_combined_markdown_file(
 
     if combined_md_lines:
         combined_md = "\n".join(combined_md_lines)
-        # Note: No need to apply fix_streamlit_formulas again since we already fixed each page
+        # Note: No need to apply fix_streamlit_formulas again since we already fixed each page (if enabled)
         filename = f"document_{session_id}{version_suffix}.md"
         md_path = os.path.join(temp_dir, filename)
         with open(md_path, "w", encoding="utf-8") as f:
@@ -1289,6 +1299,7 @@ def display_processing_results(config):
                     results["temp_dir"],
                     include_headers_footers=include_hf,
                     include_page_numbers=include_page_numbers,
+                    fix_formulas=config["fix_formulas"],
                 )
                 if md_file_path:
                     # Generate appropriate filename based on user preference
@@ -1383,12 +1394,15 @@ def display_processing_results(config):
             has_json_content = bool(current_result.get("cells_data"))
             text = f"##### Page {current_page + 1} preview ↴"
 
-            # Apply formula fixes once for all uses
+            # Apply formula fixes once for all uses (if enabled)
             fixed_page_md = None
             if has_md_content:
-                fixed_page_md = fix_streamlit_formulas(
-                    current_result["md_content"], use_mathdollar=True
-                )
+                if config["fix_formulas"]:
+                    fixed_page_md = fix_streamlit_formulas(
+                        current_result["md_content"], use_mathdollar=True
+                    )
+                else:
+                    fixed_page_md = current_result["md_content"]
 
             if has_md_content and has_json_content:
                 # Show both in two columns
@@ -1440,12 +1454,15 @@ def display_processing_results(config):
             has_layout_image = bool(results["layout_result"])
             has_markdown = bool(results["markdown_content"])
 
-            # Apply formula fixes once for all uses
+            # Apply formula fixes once for all uses (if enabled)
             fixed_markdown_content = None
             if has_markdown:
-                fixed_markdown_content = fix_streamlit_formulas(
-                    results["markdown_content"], use_mathdollar=True
-                )
+                if config["fix_formulas"]:
+                    fixed_markdown_content = fix_streamlit_formulas(
+                        results["markdown_content"], use_mathdollar=True
+                    )
+                else:
+                    fixed_markdown_content = results["markdown_content"]
 
             if has_layout_image and has_markdown:
                 # Show both in two columns
@@ -1483,10 +1500,14 @@ def display_processing_results(config):
             with download_col1:
                 # Download button for markdown
                 if results["markdown_content"]:
-                    # Use \$ escaping for file downloads (better compatibility)
-                    fixed_download_content = fix_streamlit_formulas(
-                        results["markdown_content"], use_mathdollar=False
-                    )
+                    # Use \$ escaping for file downloads (better compatibility) if enabled
+                    if config["fix_formulas"]:
+                        fixed_download_content = fix_streamlit_formulas(
+                            results["markdown_content"], use_mathdollar=False
+                        )
+                    else:
+                        fixed_download_content = results["markdown_content"]
+
                     st.download_button(
                         label="💾 Download Markdown",
                         data=fixed_download_content,
@@ -1571,7 +1592,8 @@ def process_and_display_results_legacy(output: dict, image: Image.Image, config:
 
         with col2:
             md_code = layoutjson2md(image, cells, text_key="text")
-            md_code = fix_streamlit_formulas(md_code, use_mathdollar=True)
+            if config["fix_formulas"]:
+                md_code = fix_streamlit_formulas(md_code, use_mathdollar=True)
             st.markdown("##### Markdown Format")
             st.markdown(md_code, unsafe_allow_html=True)
 
