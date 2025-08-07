@@ -775,6 +775,9 @@ def process_file_with_high_level_api(
             )
 
         try:
+            # Initialize progress tracking variables for both modes
+            progress_complete = None
+
             # Check if enhanced progress tracking is requested
             if config.get("show_progress_bar", False):
                 # Use enhanced progress with progress bar
@@ -791,7 +794,6 @@ def process_file_with_high_level_api(
                 )
             else:
                 # Use standard progress tracking with separate threads
-
                 # Create a progress tracking mechanism
                 progress_queue = queue.Queue()
                 progress_complete = threading.Event()
@@ -950,7 +952,9 @@ def process_file_with_high_level_api(
             return pdf_result
 
         except Exception as e:
-            progress_complete.set()  # Stop progress tracking
+            # Stop progress tracking if it was initialized
+            if progress_complete is not None and hasattr(progress_complete, "set"):
+                progress_complete.set()
             if status_placeholder:
                 status_placeholder.error(f"❌ PDF processing failed: {str(e)}")
             raise e
