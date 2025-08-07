@@ -753,6 +753,17 @@ def process_file_with_high_level_api(
     file_path, file_ext, prompt_mode, config, status_placeholder=None
 ):
     """Process file using high-level API with progress updates"""
+    # Ensure parser is initialized
+    if "dots_parser" not in st.session_state:
+        st.session_state.dots_parser = DotsOCRParser(
+            ip=config["ip"],
+            port=config["port"],
+            dpi=200,
+            min_pixels=config["min_pixels"],
+            max_pixels=config["max_pixels"],
+            num_thread=16,
+        )
+
     # Update parser configuration
     st.session_state.dots_parser.ip = config["ip"]
     st.session_state.dots_parser.port = config["port"]
