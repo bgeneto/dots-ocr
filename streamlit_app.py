@@ -14,6 +14,9 @@ import uuid
 import zipfile
 import base64
 import time
+import threading
+import queue
+import glob
 from PIL import Image
 import requests
 
@@ -551,7 +554,7 @@ def create_config_sidebar():
 
         config["show_progress_bar"] = st.checkbox(
             "Show Progress Bar",
-            value=False,
+            value=True,
             help="Display a visual progress bar during PDF processing instead of text-based progress updates.",
         )
 
@@ -788,9 +791,6 @@ def process_file_with_high_level_api(
                 )
             else:
                 # Use standard progress tracking with separate threads
-                import threading
-                import queue
-                import glob
 
                 # Create a progress tracking mechanism
                 progress_queue = queue.Queue()
@@ -822,7 +822,7 @@ def process_file_with_high_level_api(
                                     )
                         except queue.Empty:
                             continue
-                        except:
+                        except Exception:
                             break
 
                 def monitor_progress():
@@ -841,7 +841,7 @@ def process_file_with_high_level_api(
                                 last_count += 1
 
                             time.sleep(2)  # Check every 2 seconds
-                        except:
+                        except Exception:
                             break
 
                 # Start progress tracking threads
@@ -862,8 +862,6 @@ def process_file_with_high_level_api(
                 # Signal completion and wait a moment for final updates
                 progress_complete.set()
                 time.sleep(0.5)  # Allow final progress updates to display
-            progress_complete.set()
-            time.sleep(0.5)  # Allow final progress updates to display
 
             if status_placeholder:
                 status_placeholder.info(
@@ -1014,11 +1012,6 @@ def process_pdf_with_enhanced_progress(
         progress_bar = st.progress(0)
         progress_text = st.empty()
 
-    # Add enhanced progress tracking
-    import threading
-    import queue
-    import glob
-
     # Create a progress tracking mechanism
     progress_queue = queue.Queue()
     progress_complete = threading.Event()
@@ -1046,15 +1039,17 @@ def process_pdf_with_enhanced_progress(
                         f"ETA: {eta:.0f}s"
                     )
 
-                    if use_progress_bar and progress_bar and progress_text:
-                        progress_bar.progress(progress)
-                        progress_text.text(progress_msg)
+                    if use_progress_bar:
+                        if progress_bar is not None:
+                            progress_bar.progress(progress)
+                        if progress_text is not None:
+                            progress_text.text(progress_msg)
                     elif status_placeholder:
                         status_placeholder.info(progress_msg)
 
             except queue.Empty:
                 continue
-            except:
+            except Exception:
                 break
 
     def monitor_progress():
@@ -1073,7 +1068,7 @@ def process_pdf_with_enhanced_progress(
                     last_count += 1
 
                 time.sleep(1.5)  # Check every 1.5 seconds
-            except:
+            except Exception:
                 break
 
     try:
@@ -1097,12 +1092,14 @@ def process_pdf_with_enhanced_progress(
         # Signal completion and finalize progress display
         progress_complete.set()
 
-        if use_progress_bar and progress_bar and progress_text:
-            progress_bar.progress(1.0)
-            progress_text.text("✅ Processing complete!")
-            time.sleep(1)
-            progress_bar.empty()
-            progress_text.empty()
+        if use_progress_bar:
+            if progress_bar is not None:
+                progress_bar.progress(1.0)
+            if progress_text is not None:
+                progress_text.text("✅ Processing complete!")
+                time.sleep(1)
+                progress_bar.empty() if progress_bar is not None else None
+                progress_text.empty() if progress_text is not None else None
 
         return results
 
@@ -1110,9 +1107,11 @@ def process_pdf_with_enhanced_progress(
         progress_complete.set()  # Stop progress tracking
 
         # Clean up progress display on error
-        if use_progress_bar and progress_bar and progress_text:
-            progress_bar.empty()
-            progress_text.empty()
+        if use_progress_bar:
+            if progress_bar is not None:
+                progress_bar.empty()
+            if progress_text is not None:
+                progress_text.empty()
 
         raise e
 
