@@ -1492,7 +1492,14 @@ def main():
             st.session_state.processing_results["processing_time"] = processing_time
 
         except Exception as e:
-            status_placeholder.error(f"❌ Processing failed: {e}")
+            # Handle missing parser attribute differently
+            if isinstance(e, AttributeError) and "dots_parser" in str(e):
+                status_placeholder.error(
+                    "❌ Failed to initialize DotsOCRParser. Please ensure the inference server is running at "
+                    f"{config['ip']}:{config['port']} and try again."
+                )
+            else:
+                status_placeholder.error(f"❌ Processing failed: {e}")
             st.session_state.is_processing = False
             return
 
