@@ -621,6 +621,14 @@ def create_config_sidebar() -> Dict[str, any]:
             help="Display a visual progress bar during PDF processing with a fixed pace estimate (12 pages/minute).",
         )
 
+    # Add copyright footer
+    st.sidebar.markdown(
+        "<hr style='margin-top:2em; margin-bottom:0.5em; border:1px solid #eee;'>"
+        "<div style='text-align:center; color:gray; font-size:0.9em;'>"
+        "© 2025 bgeneto. All rights reserved."
+        "</div>",
+        unsafe_allow_html=True,
+    )
     return config
 
 
@@ -1632,15 +1640,6 @@ def main() -> None:
         or st.session_state.processing_results["pdf_results"]
     ):
         display_processing_results(config)
-
-    # Add copyright footer
-    st.markdown(
-        "<hr style='margin-top:2em; margin-bottom:0.5em; border:1px solid #eee;'>"
-        "<div style='text-align:center; color:gray; font-size:0.9em;'>"
-        "© 2025 bgeneto. All rights reserved."
-        "</div>",
-        unsafe_allow_html=True,
-    )
 
 
 if __name__ == "__main__":
