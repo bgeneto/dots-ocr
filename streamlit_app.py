@@ -1510,6 +1510,15 @@ def main() -> None:
     ):
         display_processing_results(config)
 
+    # Add copyright footer
+    st.markdown(
+        "<hr style='margin-top:2em; margin-bottom:0.5em; border:1px solid #eee;'>"
+        "<div style='text-align:center; color:gray; font-size:0.9em;'>"
+        "© 2025 bgeneto. All rights reserved."
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
 
 if __name__ == "__main__":
     main()
