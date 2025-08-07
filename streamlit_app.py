@@ -522,7 +522,7 @@ def parse_pdf_with_high_level_api(
             parsed_results.append(page_result)
 
         # Merge the content of all pages
-        combined_md = "\n\n---\n\n".join(all_md_content) if all_md_content else ""
+        combined_md = "\n\n".join(all_md_content) if all_md_content else ""
 
         return {
             "parsed_results": parsed_results,
@@ -769,7 +769,7 @@ def create_combined_markdown_file(
             if include_page_numbers:
                 combined_md_lines.append(f"\n---\nPAGE: {i+1}\n---\n")
             combined_md_lines.append(md_content)
-            combined_md_lines.append("\n---\n")
+            combined_md_lines.append("\n")
 
     if combined_md_lines:
         combined_md = "\n".join(combined_md_lines)
