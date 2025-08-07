@@ -50,7 +50,7 @@ def get_parser(config: dict) -> DotsOCRParser:
                 min_pixels=config["min_pixels"],
                 max_pixels=config["max_pixels"],
                 num_thread=config.get("num_threads", 16),
-                use_batch_processing=config.get("use_batch_processing", False),
+                use_batch_processing=config.get("use_batch_processing", True),
                 batch_size=config.get("batch_size", None),
             )
         except Exception as e:
@@ -631,7 +631,7 @@ def create_config_sidebar() -> Dict[str, any]:
         st.subheader("Batch Processing Options")
         config["use_batch_processing"] = st.checkbox(
             "Enable Batch Processing (vLLM)",
-            value=False,
+            value=True,
             help="Use async batch processing with parallel preprocessing for vLLM inference. Preprocessing is done in parallel using multiple threads, while inference uses async batch processing. This can improve performance by reducing HTTP overhead and better utilizing both CPU and GPU resources.",
         )
 
