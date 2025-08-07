@@ -50,7 +50,7 @@ def get_parser(config: dict) -> DotsOCRParser:
                 min_pixels=config["min_pixels"],
                 max_pixels=config["max_pixels"],
                 num_thread=config.get("num_threads", 16),
-                use_batch_processing=config.get("use_batch_processing", True),
+                use_batch_processing=config.get("use_batch_processing", False),
                 batch_size=config.get("batch_size", None),
             )
         except Exception as e:
