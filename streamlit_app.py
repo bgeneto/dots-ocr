@@ -15,8 +15,6 @@ import zipfile
 import base64
 import time
 import threading
-import queue
-import glob
 from PIL import Image
 import requests
 
@@ -555,7 +553,7 @@ def create_config_sidebar():
         config["show_progress_bar"] = st.checkbox(
             "Show Progress Bar",
             value=True,
-            help="Display a visual progress bar during PDF processing instead of text-based progress updates.",
+            help="Display a visual progress bar during PDF processing with a fixed pace estimate (12 pages/minute).",
         )
 
     return config
@@ -771,17 +769,14 @@ def process_file_with_high_level_api(
 
         if status_placeholder:
             status_placeholder.info(
-                f"🚀 Processing {total_pages} PDF pages in parallel using {optimal_threads} threads..."
+                f"⏳ Please wait, processing {total_pages} PDF pages in parallel using {optimal_threads} threads..."
             )
 
         try:
-            # Initialize progress tracking variables for both modes
-            progress_complete = None
-
-            # Check if enhanced progress tracking is requested
+            # Check if progress bar is requested
             if config.get("show_progress_bar", False):
-                # Use enhanced progress with progress bar
-                results = process_pdf_with_enhanced_progress(
+                # Use fixed pace progress bar (12 pages/minute = 5 seconds/page)
+                results = process_pdf_with_fixed_pace_progress(
                     file_path,
                     prompt_mode,
                     config,
@@ -789,69 +784,12 @@ def process_file_with_high_level_api(
                     session_id,
                     filename,
                     total_pages,
-                    optimal_threads,
                     status_placeholder,
                 )
             else:
-                # Use standard progress tracking with separate threads
-                # Create a progress tracking mechanism
-                progress_queue = queue.Queue()
-                progress_complete = threading.Event()
-
-                def progress_updater():
-                    """Update progress display in a separate thread"""
-                    processed = 0
-                    start_time = time.time()
-
-                    while not progress_complete.is_set():
-                        try:
-                            # Check for completion messages
-                            message = progress_queue.get(timeout=1.0)
-                            if message == "page_complete":
-                                processed += 1
-                                elapsed = time.time() - start_time
-                                avg_time = elapsed / processed if processed > 0 else 0
-                                estimated_remaining = avg_time * (
-                                    total_pages - processed
-                                )
-
-                                if status_placeholder:
-                                    progress_percent = (processed / total_pages) * 100
-                                    status_placeholder.info(
-                                        f"🔄 Processing pages: {processed}/{total_pages} ({progress_percent:.1f}%) - "
-                                        f"Avg: {avg_time:.1f}s/page - "
-                                        f"ETA: {estimated_remaining:.0f}s"
-                                    )
-                        except queue.Empty:
-                            continue
-                        except Exception:
-                            break
-
-                def monitor_progress():
-                    """Monitor file creation to estimate progress"""
-                    expected_pattern = os.path.join(temp_dir, f"{filename}_page_*.json")
-                    last_count = 0
-
-                    while not progress_complete.is_set():
-                        try:
-                            created_files = glob.glob(expected_pattern)
-                            current_count = len(created_files)
-
-                            # Send progress updates for newly created files
-                            while current_count > last_count:
-                                progress_queue.put("page_complete")
-                                last_count += 1
-
-                            time.sleep(2)  # Check every 2 seconds
-                        except Exception:
-                            break
-
-                # Start progress tracking threads
-                progress_thread = threading.Thread(target=progress_updater, daemon=True)
-                progress_thread.start()
-
-                monitor_thread = threading.Thread(target=monitor_progress, daemon=True)
-                monitor_thread.start()
+                # Simple processing without progress tracking
+                if status_placeholder:
+                    status_placeholder.info(f"⏳ Processing {total_pages} PDF pages...")
 
                 # This will process all pages concurrently using ThreadPool
                 results = st.session_state.dots_parser.parse_pdf(
@@ -860,10 +798,6 @@ def process_file_with_high_level_api(
                     prompt_mode=prompt_mode,
                     save_dir=temp_dir,
                 )
-
-                # Signal completion and wait a moment for final updates
-                progress_complete.set()
-                time.sleep(0.5)  # Allow final progress updates to display
 
             if status_placeholder:
                 status_placeholder.info(
@@ -952,9 +886,6 @@ def process_file_with_high_level_api(
             return pdf_result
 
         except Exception as e:
-            # Stop progress tracking if it was initialized
-            if progress_complete is not None and hasattr(progress_complete, "set"):
-                progress_complete.set()
             if status_placeholder:
                 status_placeholder.error(f"❌ PDF processing failed: {str(e)}")
             raise e
@@ -994,7 +925,7 @@ def process_file_with_high_level_api(
         )
 
 
-def process_pdf_with_enhanced_progress(
+def process_pdf_with_fixed_pace_progress(
     file_path,
     prompt_mode,
     config,
@@ -1002,121 +933,93 @@ def process_pdf_with_enhanced_progress(
     session_id,
     filename,
     total_pages,
-    optimal_threads,
     status_placeholder=None,
 ):
-    """Process PDF with enhanced progress tracking including optional progress bar"""
+    """Process PDF with fixed pace progress bar (12 pages/minute = 5 seconds/page)"""
 
-    use_progress_bar = config.get("show_progress_bar", False)
+    # Calculate total expected time based on 12 pages/minute (5 seconds per page)
+    seconds_per_page = 5.0
+    total_expected_time = total_pages * seconds_per_page
 
-    # Initialize progress tracking components
-    progress_bar = None
-    progress_text = None
-    if use_progress_bar:
-        progress_bar = st.progress(0)
-        progress_text = st.empty()
+    # Initialize progress bar
+    progress_bar = st.progress(0)
+    progress_text = st.empty()
 
-    # Create a progress tracking mechanism
-    progress_queue = queue.Queue()
-    progress_complete = threading.Event()
+    # Start the actual processing in a separate thread
+    result_container = {"results": None, "error": None, "completed": False}
 
-    def enhanced_progress_updater():
-        """Enhanced progress updater with optional progress bar"""
-        processed = 0
-        start_time = time.time()
+    def process_pdf_thread():
+        """Process PDF in background thread"""
+        try:
+            results = st.session_state.dots_parser.parse_pdf(
+                input_path=file_path,
+                filename=filename,
+                prompt_mode=prompt_mode,
+                save_dir=temp_dir,
+            )
+            result_container["results"] = results
+        except Exception as e:
+            result_container["error"] = e
+        finally:
+            result_container["completed"] = True
 
-        while not progress_complete.is_set():
-            try:
-                message = progress_queue.get(timeout=1.0)
-                if message == "page_complete":
-                    processed += 1
-                    progress = processed / total_pages
-                    elapsed = time.time() - start_time
-                    avg_time = elapsed / processed if processed > 0 else 0
-                    eta = avg_time * (total_pages - processed)
+    # Start processing thread
+    processing_thread = threading.Thread(target=process_pdf_thread, daemon=True)
+    processing_thread.start()
 
-                    # Update progress display
-                    progress_msg = (
-                        f"🔄 Processing: {processed}/{total_pages} "
-                        f"({progress*100:.1f}%) - "
-                        f"Avg: {avg_time:.1f}s/page - "
-                        f"ETA: {eta:.0f}s"
-                    )
-
-                    if use_progress_bar:
-                        if progress_bar is not None:
-                            progress_bar.progress(progress)
-                        if progress_text is not None:
-                            progress_text.text(progress_msg)
-                    elif status_placeholder:
-                        status_placeholder.info(progress_msg)
-
-            except queue.Empty:
-                continue
-            except Exception:
-                break
-
-    def monitor_progress():
-        """Monitor file creation to estimate progress"""
-        expected_pattern = os.path.join(temp_dir, f"{filename}_page_*.json")
-        last_count = 0
-
-        while not progress_complete.is_set():
-            try:
-                created_files = glob.glob(expected_pattern)
-                current_count = len(created_files)
-
-                # Send progress updates for newly created files
-                while current_count > last_count:
-                    progress_queue.put("page_complete")
-                    last_count += 1
-
-                time.sleep(1.5)  # Check every 1.5 seconds
-            except Exception:
-                break
+    # Update progress bar with fixed pace
+    start_time = time.time()
+    update_interval = 0.1  # Update every 100ms for smooth progress
 
     try:
-        # Start progress tracking threads
-        progress_thread = threading.Thread(
-            target=enhanced_progress_updater, daemon=True
-        )
-        progress_thread.start()
+        while not result_container["completed"]:
+            elapsed_time = time.time() - start_time
 
-        monitor_thread = threading.Thread(target=monitor_progress, daemon=True)
-        monitor_thread.start()
+            # Calculate progress based on fixed pace, capped at 95% until actually complete
+            expected_progress = min(elapsed_time / total_expected_time, 0.95)
 
-        # Process all pages concurrently using ThreadPool
-        results = st.session_state.dots_parser.parse_pdf(
-            input_path=file_path,
-            filename=filename,
-            prompt_mode=prompt_mode,
-            save_dir=temp_dir,
-        )
+            # Update progress bar
+            progress_bar.progress(expected_progress)
 
-        # Signal completion and finalize progress display
-        progress_complete.set()
+            # Update text with estimated time
+            remaining_time = max(0, total_expected_time - elapsed_time)
+            minutes = int(remaining_time // 60)
+            seconds = int(remaining_time % 60)
 
-        if use_progress_bar:
-            if progress_bar is not None:
-                progress_bar.progress(1.0)
-            if progress_text is not None:
-                progress_text.text("✅ Processing complete!")
-                time.sleep(1)
-                progress_bar.empty() if progress_bar is not None else None
-                progress_text.empty() if progress_text is not None else None
+            if remaining_time > 0:
+                if minutes > 0:
+                    time_str = f"{minutes}m {seconds}s"
+                else:
+                    time_str = f"{seconds}s"
+                progress_text.text(
+                    f"🔄 Processing {total_pages} pages... ETA: {time_str}"
+                )
+            else:
+                progress_text.text("🔄 Finalizing processing...")
 
-        return results
+            time.sleep(update_interval)
+
+        # Complete the progress bar
+        progress_bar.progress(1.0)
+        progress_text.text("✅ Processing complete!")
+
+        # Keep the completion message briefly
+        time.sleep(0.5)
+
+        # Clean up progress display
+        progress_bar.empty()
+        progress_text.empty()
+
+        # Check for errors
+        if result_container["error"]:
+            raise result_container["error"]
+
+        return result_container["results"]
 
     except Exception as e:
-        progress_complete.set()  # Stop progress tracking
-
         # Clean up progress display on error
-        if use_progress_bar:
-            if progress_bar is not None:
-                progress_bar.empty()
-            if progress_text is not None:
-                progress_text.empty()
-
+        progress_bar.empty()
+        progress_text.empty()
         raise e
 
 
@@ -1220,8 +1123,8 @@ def display_processing_results(config):
                     if not include_hf:
                         download_label += " (no headers/footers)"
 
-                    # Make the key unique by including session_id
-                    download_key = f"download_combined_md_{results['session_id']}"
+                    # Make the key unique by including session_id and config options
+                    download_key = f"download_combined_md_{results['session_id']}_{include_hf}_{include_page_numbers}"
                     st.download_button(
                         label=download_label,
                         data=file_content,
@@ -1255,7 +1158,7 @@ def display_processing_results(config):
         with col1:
             if st.button(
                 "⬅️ Previous Page",
-                key=f"prev_results_page_{results['session_id']}",
+                key=f"prev_results_page_{results['session_id']}_{current_page}",
                 disabled=current_page == 0,
             ):
                 st.session_state.results_page = max(0, current_page - 1)
@@ -1264,7 +1167,7 @@ def display_processing_results(config):
         with col3:
             if st.button(
                 "Next Page ➡️",
-                key=f"next_results_page_{results['session_id']}",
+                key=f"next_results_page_{results['session_id']}_{current_page}",
                 disabled=current_page == total_pages - 1,
             ):
                 st.session_state.results_page = min(total_pages - 1, current_page + 1)
@@ -1274,16 +1177,27 @@ def display_processing_results(config):
         if st.session_state.results_page < len(results["pdf_results"]):
             current_result = results["pdf_results"][st.session_state.results_page]
 
-            col1, col2 = st.columns(2)
-            with col1:
-                if current_result.get("md_content"):
+            # Check if we have both markdown and JSON data to determine layout
+            has_md_content = bool(current_result.get("md_content"))
+            has_json_content = bool(current_result.get("cells_data"))
+
+            if has_md_content and has_json_content:
+                # Show both in two columns
+                col1, col2 = st.columns(2)
+                with col1:
                     st.markdown("##### Current Page Preview (md)")
                     st.markdown(current_result["md_content"], unsafe_allow_html=True)
-
-            with col2:
-                if current_result.get("cells_data"):
+                with col2:
                     st.markdown("##### Current Page Preview (json)")
                     st.json(current_result["cells_data"])
+            elif has_md_content:
+                # Show only markdown in full width
+                st.markdown("##### Current Page Preview (md)")
+                st.markdown(current_result["md_content"], unsafe_allow_html=True)
+            elif has_json_content:
+                # Show only JSON in full width
+                st.markdown("##### Current Page Preview (json)")
+                st.json(current_result["cells_data"])
 
     else:  # Image results
         if results["layout_result"] and results["original_image"]:
@@ -1313,20 +1227,34 @@ def display_processing_results(config):
 
             st.info(info_text)
 
-            col1, col2 = st.columns(2)
+            # Check if we have both layout image and markdown content
+            has_layout_image = bool(results["layout_result"])
+            has_markdown = bool(results["markdown_content"])
 
-            with col1:
-                st.markdown("##### Layout Detection Result")
-                # Limit the width for high-resolution screens
-                display_width = get_limited_image_width(
-                    results["layout_result"], max_width=600
-                )
-                st.image(results["layout_result"], width=display_width)
-
-            with col2:
-                if results["markdown_content"]:
+            if has_layout_image and has_markdown:
+                # Show both in two columns
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("##### Layout Detection Result")
+                    # Limit the width for high-resolution screens
+                    display_width = get_limited_image_width(
+                        results["layout_result"], max_width=600
+                    )
+                    st.image(results["layout_result"], width=display_width)
+                with col2:
                     st.markdown("##### Markdown Content")
                     st.markdown(results["markdown_content"], unsafe_allow_html=True)
+            elif has_layout_image:
+                # Show only layout image in full width
+                st.markdown("##### Layout Detection Result")
+                display_width = get_limited_image_width(
+                    results["layout_result"], max_width=800
+                )
+                st.image(results["layout_result"], width=display_width)
+            elif has_markdown:
+                # Show only markdown in full width
+                st.markdown("##### Markdown Content")
+                st.markdown(results["markdown_content"], unsafe_allow_html=True)
 
             # Show JSON data
             if results["cells_data"]:
