@@ -223,7 +223,12 @@ def fix_streamlit_formulas(md: str, use_mathdollar: bool = False) -> str:
         return f"__INLINE_MATH_{len(inline_math_blocks)-1}__"
 
     # More restrictive pattern: require backslash (LaTeX command) or math operators/symbols
-    md = re.sub(r"\$[^$]*(?:\\[a-zA-Z]+|[^$\w\s.,()]+)[^$]*\$", store_inline_math, md)
+    # But make sure the math content is reasonably close to the start to avoid false positives
+    md = re.sub(
+        r"\$[^$]{0,50}(?:\\[a-zA-Z]+|[^$\w\s.,()]{1,3})[^$]{0,50}\$",
+        store_inline_math,
+        md,
+    )
 
     # 3) Now escape currency in the remaining text
     md = escape_currency(md)
