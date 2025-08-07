@@ -1423,6 +1423,13 @@ def main() -> None:
                     st.write(
                         f"- Total pages: {st.session_state.pdf_cache['total_pages']}"
                     )
+                    # Show total PDF file size in kB
+                    try:
+                        pdf_size_bytes = os.path.getsize(file_path)
+                        pdf_size_kb = pdf_size_bytes / 1024
+                        st.write(f"- File size: {pdf_size_kb:.1f} kB")
+                    except Exception:
+                        pass
 
             else:
                 # Load image for preview
