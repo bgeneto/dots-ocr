@@ -39,7 +39,7 @@ class DotsOCRParser:
         max_pixels=None,
         use_hf=False,
         batch_size=None,  # New parameter for batch processing
-        use_batch_processing=True,  # Enable/disable batch processing
+        use_batch_processing=False,  # Enable/disable batch processing
     ):
         self.dpi = dpi
 

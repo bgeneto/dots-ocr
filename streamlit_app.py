@@ -50,7 +50,7 @@ def get_parser(config: dict) -> DotsOCRParser:
                 min_pixels=config["min_pixels"],
                 max_pixels=config["max_pixels"],
                 num_thread=config.get("num_threads", 16),
-                use_batch_processing=config.get("use_batch_processing", True),
+                use_batch_processing=config.get("use_batch_processing", False),
                 batch_size=config.get("batch_size", None),
             )
         except Exception as e:
@@ -63,7 +63,7 @@ def get_parser(config: dict) -> DotsOCRParser:
     parser.min_pixels = config["min_pixels"]
     parser.max_pixels = config["max_pixels"]
     parser.num_thread = config.get("num_threads", 16)
-    parser.use_batch_processing = config.get("use_batch_processing", True)
+    parser.use_batch_processing = config.get("use_batch_processing", False)
     parser.batch_size = config.get("batch_size", None)
     return parser
 
@@ -125,7 +125,7 @@ def initialize_session_state():
                 min_pixels=DEFAULT_CONFIG["min_pixels"],
                 max_pixels=DEFAULT_CONFIG["max_pixels"],
                 num_thread=16,  # Default thread count
-                use_batch_processing=True,  # Enable batch processing by default
+                use_batch_processing=False,  # Enable batch processing by default
                 batch_size=None,  # Process all pages in one batch
             )
         except Exception as e:
@@ -631,7 +631,7 @@ def create_config_sidebar() -> Dict[str, any]:
         st.subheader("Batch Processing Options")
         config["use_batch_processing"] = st.checkbox(
             "Enable Batch Processing (vLLM)",
-            value=True,
+            value=False,
             help="Use async batch processing with parallel preprocessing for vLLM inference. Preprocessing is done in parallel using multiple threads, while inference uses async batch processing. This can improve performance by reducing HTTP overhead and better utilizing both CPU and GPU resources.",
         )
 
@@ -895,11 +895,11 @@ def process_file_with_high_level_api(
 
         # Update parser with optimal thread count and batch settings
         parser.num_thread = optimal_threads
-        parser.use_batch_processing = config.get("use_batch_processing", True)
+        parser.use_batch_processing = config.get("use_batch_processing", False)
         parser.batch_size = config.get("batch_size", None)
 
         # Show processing method info
-        if config.get("use_batch_processing", True) and not parser.use_hf:
+        if config.get("use_batch_processing", False) and not parser.use_hf:
             batch_info = f"🚀 **Using Batch Processing** for {total_pages} pages"
             if config.get("batch_size") and config["batch_size"] > 0:
                 batch_info += f" (batch size: {config['batch_size']})"
@@ -921,7 +921,7 @@ def process_file_with_high_level_api(
         # Determine processing method for status message
         processing_method = (
             "batch processing"
-            if config.get("use_batch_processing", True) and not parser.use_hf
+            if config.get("use_batch_processing", False) and not parser.use_hf
             else f"{optimal_threads} threads"
         )
 
@@ -1254,7 +1254,7 @@ def display_processing_results(config):
         # Determine processing method used
         processing_method = (
             "Batch Processing"
-            if config.get("use_batch_processing", True)
+            if config.get("use_batch_processing", False)
             else f"Threading ({results.get('threads_used', config.get('num_threads', 16))} threads)"
         )
 
