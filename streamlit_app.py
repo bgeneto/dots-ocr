@@ -791,6 +791,9 @@ def create_combined_markdown_file(
                 md_content = result["md_content"]
 
         if md_content:
+            # Apply fix to each page's content before adding to combined
+            md_content = fix_streamlit_formulas(md_content)
+
             if include_page_numbers:
                 combined_md_lines.append(f"---\nPAGE: {i+1}\n---\n")
             combined_md_lines.append(md_content)
@@ -798,7 +801,7 @@ def create_combined_markdown_file(
 
     if combined_md_lines:
         combined_md = "\n".join(combined_md_lines)
-        combined_md = fix_streamlit_formulas(combined_md)  # Apply formula fixes
+        # Note: No need to apply fix_streamlit_formulas again since we already fixed each page
         filename = f"document_{session_id}{version_suffix}.md"
         md_path = os.path.join(temp_dir, filename)
         with open(md_path, "w", encoding="utf-8") as f:
@@ -1383,7 +1386,9 @@ def display_processing_results(config):
             # Apply formula fixes once for all uses
             fixed_page_md = None
             if has_md_content:
-                fixed_page_md = fix_streamlit_formulas(current_result["md_content"])
+                fixed_page_md = fix_streamlit_formulas(
+                    current_result["md_content"], use_mathdollar=True
+                )
 
             if has_md_content and has_json_content:
                 # Show both in two columns
@@ -1439,7 +1444,7 @@ def display_processing_results(config):
             fixed_markdown_content = None
             if has_markdown:
                 fixed_markdown_content = fix_streamlit_formulas(
-                    results["markdown_content"]
+                    results["markdown_content"], use_mathdollar=True
                 )
 
             if has_layout_image and has_markdown:
@@ -1478,9 +1483,13 @@ def display_processing_results(config):
             with download_col1:
                 # Download button for markdown
                 if results["markdown_content"]:
+                    # Use \$ escaping for file downloads (better compatibility)
+                    fixed_download_content = fix_streamlit_formulas(
+                        results["markdown_content"], use_mathdollar=False
+                    )
                     st.download_button(
                         label="💾 Download Markdown",
-                        data=fixed_markdown_content,
+                        data=fixed_download_content,
                         file_name=f"layout_result_{results['session_id']}.md",
                         mime="text/markdown",
                         key="download_image_md",
@@ -1562,7 +1571,7 @@ def process_and_display_results_legacy(output: dict, image: Image.Image, config:
 
         with col2:
             md_code = layoutjson2md(image, cells, text_key="text")
-            md_code = fix_streamlit_formulas(md_code)
+            md_code = fix_streamlit_formulas(md_code, use_mathdollar=True)
             st.markdown("##### Markdown Format")
             st.markdown(md_code, unsafe_allow_html=True)
 

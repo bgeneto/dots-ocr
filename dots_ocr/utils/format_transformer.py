@@ -181,7 +181,7 @@ def layoutjson2md(
     return markdown_text
 
 
-def fix_streamlit_formulas(md: str) -> str:
+def fix_streamlit_formulas(md: str, use_mathdollar: bool = False) -> str:
     """
     Fixes the format of formulas in Markdown to ensure they display correctly in Streamlit:
       1) safely escapes any standalone '$' followed by a digit (e.g. $5.00, R$12.50),
@@ -190,6 +190,8 @@ def fix_streamlit_formulas(md: str) -> str:
 
     Args:
         md (str): The Markdown text to fix.
+        use_mathdollar (bool): If True, use \mathdollar{} for currency (better for KaTeX display).
+                              If False, use \$ escape (better for file downloads).
 
     Returns:
         str: The fixed Markdown text.
@@ -197,8 +199,12 @@ def fix_streamlit_formulas(md: str) -> str:
 
     # Helper to escape currency‐style $ (e.g. $5.00) in plain text
     def escape_currency(txt: str) -> str:
-        # Only match a single '$' not already escaped, followed by a digit
-        return re.sub(r"(?<!\\)\$(?=\d)", r"\\$", txt)
+        if use_mathdollar:
+            # Use \mathdollar{} for KaTeX compatibility in display
+            return re.sub(r"(?<!\\)\$(?=\d)", r"\\mathdollar{}", txt)
+        else:
+            # Use \$ for file downloads
+            return re.sub(r"(?<!\\)\$(?=\d)", r"\\$", txt)
 
     # 1) Carve out EVERY math token ($…$ or $$…$$), so we don't touch them
     math_split = re.split(r"(\$\$.*?\$\$|\$[^$]+\$)", md, flags=re.DOTALL)
