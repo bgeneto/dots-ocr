@@ -666,11 +666,11 @@ class DotsOCRParser:
     def _parse_pdf_with_batch(
         self, input_path, filename, prompt_mode, save_dir, images_origin
     ):
-        """Batch processing implementation"""
+        """Batch processing implementation with parallel preprocessing"""
         total_pages = len(images_origin)
-        print(f"Preprocessing {total_pages} pages...")
+        print(f"Preprocessing {total_pages} pages using {self.num_thread} threads...")
 
-        # Preprocess all images once to avoid repeated work
+        # Preprocess all images in parallel to avoid repeated work
         images_data = []
         min_pixels, max_pixels = self.min_pixels, self.max_pixels
 
@@ -679,22 +679,29 @@ class DotsOCRParser:
             min_pixels = min_pixels or MIN_PIXELS
             max_pixels = max_pixels or MAX_PIXELS
 
-        for page_idx, origin_image in enumerate(images_origin):
-            # Preprocess image once
-            processed_image = fetch_image(
-                origin_image, min_pixels=min_pixels, max_pixels=max_pixels
-            )
-            input_height, input_width = smart_resize(
-                processed_image.height, processed_image.width
-            )
+        def preprocess_single_page(page_data):
+            """Preprocess a single page in parallel"""
+            page_idx, origin_image = page_data
+            try:
+                # Preprocess image
+                processed_image = fetch_image(
+                    origin_image, min_pixels=min_pixels, max_pixels=max_pixels
+                )
+                input_height, input_width = smart_resize(
+                    processed_image.height, processed_image.width
+                )
 
-            # Generate prompt
-            prompt = self.get_prompt(
-                prompt_mode, None, origin_image, processed_image, min_pixels, max_pixels
-            )
+                # Generate prompt
+                prompt = self.get_prompt(
+                    prompt_mode,
+                    None,
+                    origin_image,
+                    processed_image,
+                    min_pixels,
+                    max_pixels,
+                )
 
-            images_data.append(
-                {
+                return {
                     "origin_image": origin_image,
                     "processed_image": processed_image,
                     "prompt": prompt,
@@ -705,11 +712,35 @@ class DotsOCRParser:
                     "input_width": input_width,
                     "input_height": input_height,
                 }
+            except Exception as e:
+                print(f"Error preprocessing page {page_idx}: {e}")
+                return None
+
+        # Use ThreadPool to preprocess images in parallel
+        with ThreadPool(self.num_thread) as pool:
+            page_data_list = list(enumerate(images_origin))
+            images_data = list(
+                tqdm(
+                    pool.imap(preprocess_single_page, page_data_list),
+                    total=total_pages,
+                    desc="Preprocessing pages",
+                )
             )
 
+        # Filter out any failed preprocessing
+        images_data = [data for data in images_data if data is not None]
+
+        if not images_data:
+            raise ValueError("All pages failed preprocessing")
+
+        print(f"Successfully preprocessed {len(images_data)} pages")
+
         try:
-            # Use batch processing
+            # Now use batch inference on preprocessed data
             results = self._parse_batch_images(images_data, prompt_mode)
+
+            if not results:
+                raise ValueError("Batch processing returned no results")
 
             # Sort results by page number and add file path
             results.sort(key=lambda x: x["page_no"])
@@ -721,10 +752,47 @@ class DotsOCRParser:
 
         except Exception as e:
             print(f"Batch processing failed: {e}")
-            print("Falling back to threading approach...")
-            return self._parse_pdf_with_threading(
-                input_path, filename, prompt_mode, save_dir, images_origin
-            )
+            # Fallback to individual processing using already preprocessed data
+            print("Falling back to individual processing with preprocessed data...")
+
+            results = []
+            for img_data in tqdm(images_data, desc="Processing individually"):
+                try:
+                    response = self._inference_with_vllm(
+                        img_data["processed_image"], img_data["prompt"]
+                    )
+                    if response:
+                        result = self._post_process_response(
+                            response,
+                            img_data["origin_image"],
+                            img_data["processed_image"],
+                            img_data["prompt_mode"],
+                            img_data["save_dir"],
+                            img_data["save_name"],
+                            img_data["page_idx"],
+                            img_data["input_width"],
+                            img_data["input_height"],
+                        )
+                        result["file_path"] = input_path
+                        results.append(result)
+                except Exception as page_error:
+                    print(
+                        f"Failed to process page {img_data['page_idx']}: {page_error}"
+                    )
+                    continue
+
+            if results:
+                results.sort(key=lambda x: x["page_no"])
+                print(f"Completed individual processing {len(results)} pages")
+                return results
+            else:
+                # Final fallback to threading approach with original images
+                print(
+                    "Individual processing also failed, falling back to threading approach..."
+                )
+                return self._parse_pdf_with_threading(
+                    input_path, filename, prompt_mode, save_dir, images_origin
+                )
 
     def _parse_pdf_with_threading(
         self, input_path, filename, prompt_mode, save_dir, images_origin

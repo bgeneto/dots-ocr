@@ -632,7 +632,7 @@ def create_config_sidebar() -> Dict[str, any]:
         config["use_batch_processing"] = st.checkbox(
             "Enable Batch Processing (vLLM)",
             value=True,
-            help="Use async batch processing instead of threading for vLLM inference. This can improve performance by reducing HTTP overhead and better utilizing GPU resources.",
+            help="Use async batch processing with parallel preprocessing for vLLM inference. Preprocessing is done in parallel using multiple threads, while inference uses async batch processing. This can improve performance by reducing HTTP overhead and better utilizing both CPU and GPU resources.",
         )
 
         config["batch_size"] = st.number_input(
@@ -903,6 +903,8 @@ def process_file_with_high_level_api(
             batch_info = f"🚀 **Using Batch Processing** for {total_pages} pages"
             if config.get("batch_size") and config["batch_size"] > 0:
                 batch_info += f" (batch size: {config['batch_size']})"
+            batch_info += f"\n- Preprocessing: {optimal_threads} threads in parallel"
+            batch_info += f"\n- Inference: Async batch processing"
             st.info(batch_info)
         else:
             thread_reason = (
