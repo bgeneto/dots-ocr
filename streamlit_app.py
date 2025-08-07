@@ -767,7 +767,8 @@ def create_combined_markdown_file(
 
         if md_content:
             if include_page_numbers:
-                combined_md_lines.append(f"\n(Page {i + 1})\n")
+                combined_md_lines.append(f"\n<<</PAGE {i}>>>\n")
+                combined_md_lines.append(f"\n<<<PAGE {i+1}>>>\n")
             combined_md_lines.append(md_content)
             combined_md_lines.append("\n---\n")
 
