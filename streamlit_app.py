@@ -950,7 +950,7 @@ def process_file_with_high_level_api(
             parsed_results.sort(key=lambda x: x["page_no"])
 
             # Combine results
-            combined_md = "\n\n---\n\n".join(all_md) if all_md else ""
+            combined_md = "\n---\n".join(all_md) if all_md else ""
 
             pdf_result = {
                 "parsed_results": parsed_results,
