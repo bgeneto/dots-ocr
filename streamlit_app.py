@@ -542,7 +542,7 @@ def create_config_sidebar():
 
         config["num_threads"] = st.slider(
             "Concurrent Threads",
-            min_value=1,
+            min_value=0,
             max_value=48,
             value=16,
             step=4,
@@ -748,6 +748,9 @@ def process_file_with_high_level_api(
         pages = load_images_from_pdf(file_path)
         total_pages = len(pages)
 
+        # check if num_threads is set to 0
+        if config["num_threads"] == 0:
+            config["num_threads"] = 1
         # Optimize thread count: don't use more threads than pages
         optimal_threads = min(config["num_threads"], total_pages)
         if optimal_threads != config["num_threads"]:
