@@ -1295,8 +1295,8 @@ def display_processing_results(config):
                             md_file_content = f.read()
 
                         download_label = "💾 Download Markdown"
-                        if not include_hf:
-                            download_label += " (no headers/footers)"
+                        if include_hf:
+                            download_label += " (with headers/footers)"
 
                         # Make the key unique by including session_id and config options
                         download_key = f"download_combined_md_{results['session_id']}_{include_hf}_{include_page_numbers}"
