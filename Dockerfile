@@ -23,9 +23,6 @@ COPY ./setup.py .
 COPY ./dots_ocr ./dots_ocr
 RUN pip install -e . \
     && rm -rf /root/.cache/pip
-
-#COPY ./gradio_app.py .
-COPY ./streamlit_app.py .
 COPY ./start.sh .
 RUN chmod +x start.sh
 COPY ./test_images_dir ./test_images_dir
