@@ -16,6 +16,8 @@ import time
 import threading
 from PIL import Image
 import requests
+import hashlib  # for secure hashing
+from typing import List, Tuple, Optional, Dict
 
 # Local utility imports
 from dots_ocr.utils import dict_promptmode_to_prompt
@@ -29,6 +31,36 @@ from dots_ocr.utils.format_transformer import fix_streamlit_formulas
 
 # Add DotsOCRParser import
 from dots_ocr.parser import DotsOCRParser
+
+
+@st.cache_data(show_spinner=False)
+def cached_load_images(pdf_path: str) -> List[Image.Image]:
+    """Cache PDF to list of PIL Images conversion"""
+    return load_images_from_pdf(pdf_path)
+
+
+def get_parser(config: dict) -> DotsOCRParser:
+    """Return a configured DotsOCRParser, initializing if needed"""
+    if "dots_parser" not in st.session_state:
+        try:
+            st.session_state.dots_parser = DotsOCRParser(
+                ip=config["ip"],
+                port=config["port"],
+                dpi=200,
+                min_pixels=config["min_pixels"],
+                max_pixels=config["max_pixels"],
+                num_thread=config.get("num_threads", 16),
+            )
+        except Exception as e:
+            st.error(f"Failed to initialize DotsOCRParser: {e}")
+            st.stop()
+    parser = st.session_state.dots_parser
+    # Update parser settings
+    parser.ip = config["ip"]
+    parser.port = config["port"]
+    parser.min_pixels = config["min_pixels"]
+    parser.max_pixels = config["max_pixels"]
+    return parser
 
 
 # ==================== Configuration ====================
@@ -309,7 +341,7 @@ def read_image_v2(img):
     return img
 
 
-def load_file_for_preview(file_path):
+def load_file_for_preview(file_path: str) -> Tuple[Optional[Image.Image], str]:
     """Loads a file for preview, supports PDF and image files"""
     if not file_path or not os.path.exists(file_path):
         return None, "File not found"
@@ -319,7 +351,7 @@ def load_file_for_preview(file_path):
     if file_ext == ".pdf":
         try:
             # Read PDF and convert to images (one image per page)
-            pages = load_images_from_pdf(file_path)
+            pages = cached_load_images(file_path)
             st.session_state.pdf_cache["file_type"] = "pdf"
         except Exception as e:
             return None, f"PDF loading failed: {str(e)}"
@@ -420,7 +452,11 @@ def parse_image_with_high_level_api(parser, image, prompt_mode, fitz_preprocess=
         raise e
 
 
-def parse_pdf_with_high_level_api(parser, pdf_path, prompt_mode):
+def parse_pdf_with_high_level_api(
+    parser: DotsOCRParser,
+    pdf_path: str,
+    prompt_mode: str,
+) -> Dict[str, any]:
     """
     Processes using the high-level API parse_pdf from DotsOCRParser
     """
@@ -523,7 +559,7 @@ def legacy_read_image_v2(img: str):
 
 
 # ==================== UI Components ====================
-def create_config_sidebar():
+def create_config_sidebar() -> Dict[str, any]:
     """Create configuration sidebar"""
     st.sidebar.header("Configuration Parameters")
 
@@ -588,7 +624,7 @@ def create_config_sidebar():
     return config
 
 
-def get_file_input():
+def get_file_input() -> Tuple[Optional[str], Optional[str]]:
     """Get file input (images or PDF)"""
     st.markdown("#### Choose an Option:")
 
@@ -615,10 +651,10 @@ def get_file_input():
 
             # Create a hash of the file content to ensure we use the same temp file for the same upload
             file_content = uploaded_file.getvalue()
-            file_hash = hash(file_content)
+            file_hash = hashlib.sha256(file_content).hexdigest()
 
             # Create a persistent temp file path
-            temp_filename = f"uploaded_file_{abs(file_hash)}{file_ext}"
+            temp_filename = f"uploaded_file_{file_hash}{file_ext}"
             temp_dir = os.path.join(tempfile.gettempdir(), "dots_ocr_uploads")
             os.makedirs(temp_dir, exist_ok=True)
             temp_file_path = os.path.join(temp_dir, temp_filename)
@@ -745,52 +781,18 @@ def create_combined_markdown_file(
     return None
 
 
-def create_download_link(file_path, download_name):
-    """Create a download link for a file"""
-    if not file_path or not os.path.exists(file_path):
-        return None
-
-    with open(file_path, "rb") as f:
-        file_data = f.read()
-
-    b64_data = base64.b64encode(file_data).decode()
-    return f'<a href="data:application/octet-stream;base64,{b64_data}" download="{download_name}">Download {download_name}</a>'
-
-
 def process_file_with_high_level_api(
-    file_path, file_ext, prompt_mode, config, status_placeholder=None
-):
+    file_path: str,
+    file_ext: str,
+    prompt_mode: str,
+    config: Dict[str, any],
+    status_placeholder=None,
+) -> Dict[str, any]:
     """Process file using high-level API with progress updates"""
-    # Ensure parser is initialized
-    if "dots_parser" not in st.session_state:
-        try:
-            st.session_state.dots_parser = DotsOCRParser(
-                ip=config["ip"],
-                port=config["port"],
-                dpi=200,
-                min_pixels=config["min_pixels"],
-                max_pixels=config["max_pixels"],
-                num_thread=16,
-            )
-        except Exception as e:
-            st.error(f"Failed to initialize DotsOCRParser: {str(e)}")
-            st.error(
-                "Please ensure the inference server is running at "
-                f"{config['ip']}:{config['port']}"
-            )
-            st.stop()  # Stop execution if parser can't be initialized
-
-    # Ensure parser is initialized before proceeding
-    if "dots_parser" not in st.session_state:
-        st.error("Critical error: Please check server connection and try again.")
-        st.stop()
+    parser = get_parser(config)
 
     # Update parser configuration
-    st.session_state.dots_parser.ip = config["ip"]
-    st.session_state.dots_parser.port = config["port"]
-    st.session_state.dots_parser.min_pixels = config["min_pixels"]
-    st.session_state.dots_parser.max_pixels = config["max_pixels"]
-    # Note: num_thread will be optimized per file type below
+    # Note: num_thread will be set per file type below
 
     if file_ext == ".pdf":
         # PDF processing with parallel processing
@@ -803,11 +805,9 @@ def process_file_with_high_level_api(
         pages = load_images_from_pdf(file_path)
         total_pages = len(pages)
 
-        # check if num_threads is set to 0
-        if config["num_threads"] == 0:
-            config["num_threads"] = 1
-        # Optimize thread count: don't use more threads than pages
-        optimal_threads = min(config["num_threads"], total_pages)
+        # Compute threads to use without mutating config
+        use_threads = max(1, config.get("num_threads", 16))
+        optimal_threads = min(use_threads, total_pages)
         if optimal_threads != config["num_threads"]:
             if status_placeholder:
                 status_placeholder.info(
@@ -815,7 +815,7 @@ def process_file_with_high_level_api(
                 )
 
         # Update parser with optimal thread count
-        st.session_state.dots_parser.num_thread = optimal_threads
+        parser.num_thread = optimal_threads
 
         # Use the high-level parse_pdf method directly for parallel processing
         temp_dir, session_id = create_temp_session_dir()
@@ -846,7 +846,7 @@ def process_file_with_high_level_api(
                     status_placeholder.info(f"⏳ Processing {total_pages} PDF pages...")
 
                 # This will process all pages concurrently using ThreadPool
-                results = st.session_state.dots_parser.parse_pdf(
+                results = parser.parse_pdf(
                     input_path=file_path,
                     filename=filename,
                     prompt_mode=prompt_mode,
@@ -946,7 +946,7 @@ def process_file_with_high_level_api(
 
     else:
         # Image processing (single thread is sufficient)
-        st.session_state.dots_parser.num_thread = 1
+        parser.num_thread = 1
 
         if status_placeholder:
             status_placeholder.info(
@@ -955,7 +955,7 @@ def process_file_with_high_level_api(
 
         image = legacy_read_image_v2(file_path)
         parse_result = parse_image_with_high_level_api(
-            st.session_state.dots_parser, image, prompt_mode, config["fitz_preprocess"]
+            parser, image, prompt_mode, config["fitz_preprocess"]
         )
 
         if status_placeholder:
@@ -980,20 +980,23 @@ def process_file_with_high_level_api(
 
 
 def process_pdf_with_fixed_pace_progress(
-    file_path,
-    prompt_mode,
-    config,
-    temp_dir,
-    session_id,
-    filename,
-    total_pages,
+    file_path: str,
+    prompt_mode: str,
+    config: Dict[str, any],
+    temp_dir: str,
+    session_id: str,
+    filename: str,
+    total_pages: int,
     status_placeholder=None,
-):
+) -> List[Dict[str, any]]:
     """Process PDF with fixed pace progress bar (12 pages/minute = 5 seconds/page)"""
 
     # Calculate total expected time based on 12 pages/minute (5 seconds per page)
     seconds_per_page = 5.0
     total_expected_time = total_pages * seconds_per_page
+
+    # Capture parser locally to use inside the thread to avoid missing ScriptRunContext
+    parser = st.session_state.dots_parser
 
     # Initialize progress bar
     progress_bar = st.progress(0)
@@ -1005,7 +1008,7 @@ def process_pdf_with_fixed_pace_progress(
     def process_pdf_thread():
         """Process PDF in background thread"""
         try:
-            results = st.session_state.dots_parser.parse_pdf(
+            results = parser.parse_pdf(
                 input_path=file_path,
                 filename=filename,
                 prompt_mode=prompt_mode,
@@ -1387,7 +1390,7 @@ def process_and_display_results_legacy(output: dict, image: Image.Image, config:
 
 
 # ==================== Main Application ====================
-def main():
+def main() -> None:
     """Main application function"""
     st.set_page_config(
         page_title="PDF to Markdown Converter", layout="wide", page_icon="📄"
