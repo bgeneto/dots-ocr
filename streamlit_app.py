@@ -21,13 +21,12 @@ from typing import List, Tuple, Optional, Dict
 
 # Local utility imports
 from dots_ocr.utils import dict_promptmode_to_prompt
-from dots_ocr.utils.format_transformer import layoutjson2md
+from dots_ocr.utils.format_transformer import layoutjson2md, fix_streamlit_formulas
 from dots_ocr.utils.layout_utils import draw_layout_on_image, post_process_cells
 from dots_ocr.utils.image_utils import get_input_dimensions
 from dots_ocr.utils.consts import MIN_PIXELS, MAX_PIXELS
 from dots_ocr.utils.demo_utils.display import read_image
 from dots_ocr.utils.doc_utils import load_images_from_pdf
-from dots_ocr.utils.format_transformer import fix_streamlit_formulas
 
 # Add DotsOCRParser import
 from dots_ocr.parser import DotsOCRParser
@@ -1399,7 +1398,7 @@ def display_processing_results(config):
             if has_md_content:
                 if config["fix_formulas"]:
                     fixed_page_md = fix_streamlit_formulas(
-                        current_result["md_content"], use_mathdollar=True
+                        current_result["md_content"], use_backticks=True
                     )
                 else:
                     fixed_page_md = current_result["md_content"]
@@ -1459,7 +1458,7 @@ def display_processing_results(config):
             if has_markdown:
                 if config["fix_formulas"]:
                     fixed_markdown_content = fix_streamlit_formulas(
-                        results["markdown_content"], use_mathdollar=True
+                        results["markdown_content"], use_backticks=True
                     )
                 else:
                     fixed_markdown_content = results["markdown_content"]
@@ -1503,7 +1502,7 @@ def display_processing_results(config):
                     # Use \$ escaping for file downloads (better compatibility) if enabled
                     if config["fix_formulas"]:
                         fixed_download_content = fix_streamlit_formulas(
-                            results["markdown_content"], use_mathdollar=False
+                            results["markdown_content"], use_backticks=False
                         )
                     else:
                         fixed_download_content = results["markdown_content"]
@@ -1593,7 +1592,7 @@ def process_and_display_results_legacy(output: dict, image: Image.Image, config:
         with col2:
             md_code = layoutjson2md(image, cells, text_key="text")
             if config["fix_formulas"]:
-                md_code = fix_streamlit_formulas(md_code, use_mathdollar=True)
+                md_code = fix_streamlit_formulas(md_code, use_backticks=True)
             st.markdown("##### Markdown Format")
             st.markdown(md_code, unsafe_allow_html=True)
 
