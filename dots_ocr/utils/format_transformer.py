@@ -183,10 +183,10 @@ def layoutjson2md(
 
 def fix_streamlit_formulas(md: str, use_backticks: bool = False) -> str:
     """
-    Fixes the format of formulas in Markdown to ensure they display correctly in Streamlit:
+    Fixes the format of formulas in Markdown to ensure they display correctly in Streamlit/Open-webui:
       1) safely escapes any standalone '$' followed by a digit (e.g. $5.00, R$ 12.50),
          but only *outside* of any $…$ or $$…$$ math blocks;
-      2) then normalizes all $$…$$ into a proper display‐math block with its own lines.
+      2) then normalizes all $$…$$ into a proper display-math block with its own lines.
 
     Args:
         md (str): The Markdown text to fix.

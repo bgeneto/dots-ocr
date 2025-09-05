@@ -849,7 +849,7 @@ def create_combined_json_file(
     }
 
     for i, result in enumerate(pdf_results):
-        page_data = {"page_number": i + 1, "cells": result.get("cells_data", [])}
+        page_data = {"page_number": i + 1, "cells": result.get("cells_data") or []}
 
         # Only add page info if requested
         if include_page_numbers:
@@ -858,7 +858,7 @@ def create_combined_json_file(
             # If not including page numbers, just extend the cells list
             if i == 0:
                 combined_json_data["cells"] = []
-            combined_json_data["cells"].extend(result.get("cells_data", []))
+            combined_json_data["cells"].extend(result.get("cells_data") or [])
 
     # Remove pages structure if not using page numbers
     if not include_page_numbers:
