@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -ex
 
 echo 'Modifying vllm entrypoint...'
 sed -i '/^from vllm\.entrypoints\.cli\.main import main/a from DotsOCR import modeling_dots_ocr_vllm' $(which vllm)
@@ -7,9 +7,16 @@ sed -i '/^from vllm\.entrypoints\.cli\.main import main/a from DotsOCR import mo
 echo 'Starting vLLM server...'
 vllm serve /workspace/weights/DotsOCR \
     --tensor-parallel-size 1 \
-    --gpu-memory-utilization 0.5 \
-    --max-model-len 32768 \
-    --max-num-batched-tokens 8192 \
+    --gpu-memory-utilization 0.41 \
+    --max-model-len 20480 \
+    --max-num-batched-tokens 4096 \
+    --max-num-seqs 64 \
+    --cuda-graph-sizes 32 \
+    --enable-chunked-prefill \
+    --enable-prefix-caching \
+    --swap-space 8 \
+    --disable-log-stats \
+    --disable-log-requests \
     --chat-template-content-format string \
     --served-model-name model \
     --trust-remote-code &
